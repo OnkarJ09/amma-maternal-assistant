@@ -94,6 +94,7 @@ flowchart TD
 
 ### 5. Telemetry Sandbox & Calibration Studio
 * Real-time oscilloscope-style charting with live adjustable threshold sliders for fine-tuning piezoelectric sensitivity and maternal motion rejection.
+* **Apply Calibration to App**: One-tap synchronization that instantly broadcasts custom tuned thresholds across Overview (live kick gating & Cardiff count) and Trends (visual threshold overlay). Includes factory reset capability.
 
 ---
 
@@ -143,7 +144,7 @@ The app features a bottom navigation bar with 5 primary sections:
 2. **Trends (`TrendsScreen`)**:
    * Multi-day trend line charts, time-of-day distribution heatmaps, and Cardiff compliance ratios.
 3. **Sandbox (`SandboxScreen`)**:
-   * Interactive calibration studio with live threshold sliders, visual trigger alerts, and an event log.
+   * Interactive calibration studio with live threshold sliders, visual trigger alerts, real-time sync status, an event log, and an **"Apply Calibration to App"** button that synchronizes algorithm parameters across all screens.
 4. **Device (`DeviceScreen`)**:
    * BLE hardware scanning, RSSI signal meter, GATT service inspection, battery level, and firmware version.
 5. **About (`AboutScreen`)**:
