@@ -10,7 +10,7 @@ import 'package:http/testing.dart';
 
 void main() {
   testWidgets(
-      'Apply Calibration to App button updates thresholds across Overview and Sandbox',
+      'Apply Calibration button and independent gating mode switching across Overview and Sandbox',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
@@ -51,10 +51,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 1. Initial State on Overview
+    // 1. Initial State on Overview: Dual-sensor calibrated
     expect(find.text('Calibrated'), findsOneWidget);
     expect(
-      find.text('Gate: Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC'),
+      find.text('Gate: Dual-Sensor • Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC'),
       findsOneWidget,
     );
 
@@ -65,55 +65,71 @@ void main() {
     expect(find.text('Signal Analysis Sandbox'), findsOneWidget);
     expect(find.text('Apply Calibration to App'), findsOneWidget);
     expect(find.text('Reset to Defaults'), findsOneWidget);
-    expect(
-      find.text('App Synced: Overview & Trends are using these thresholds.'),
-      findsOneWidget,
-    );
+    expect(find.text('Dual Gate'), findsOneWidget);
+    expect(find.text('Piezo Only'), findsOneWidget);
+    expect(find.text('Motion Only'), findsOneWidget);
 
-    // 3. Move Piezo Spike Threshold slider to higher value
-    final sliders = find.byType(Slider);
-    expect(sliders, findsNWidgets(2));
-
-    // Drag the first slider (Piezo Spike Threshold)
-    await tester.drag(sliders.first, const Offset(150, 0));
+    // 3. Switch to 'Piezo Only' Mode (disables maternal motion gate)
+    await tester.tap(find.text('Piezo Only'));
     await tester.pumpAndSettle();
 
-    // Verify unsaved preview indicator appears
+    // Verify Piezo is enabled, and Motion gate shows Disabled
+    expect(find.text('Disabled'), findsOneWidget);
     expect(
-      find.text('Local Sandbox Preview: Tap Apply below to update Overview & Trends.'),
+      find.text('⊘ Maternal motion rejection disabled — all piezo spikes validated without activity filtering.'),
       findsOneWidget,
     );
 
-    // 4. Tap 'Apply Calibration to App' button
+    // 4. Apply Piezo-Only calibration to App
     await tester.tap(find.text('Apply Calibration to App'));
     await tester.pumpAndSettle();
 
-    // Verify confirmation SnackBar is displayed
     expect(find.byType(SnackBar), findsOneWidget);
-    expect(find.textContaining('Active calibration updated: Piezo'), findsOneWidget);
-    expect(find.textContaining('Applied to Overview & Trends!'), findsOneWidget);
+    expect(find.textContaining('Active calibration updated: Piezo-Only Mode'), findsOneWidget);
+    expect(calibrationService.isPiezoOnly, isTrue);
+    expect(calibrationService.enableMotionGate, isFalse);
 
-    // Verify sync indicator updates to App Synced
-    expect(
-      find.text('App Synced: Overview & Trends are using these thresholds.'),
-      findsOneWidget,
-    );
-
-    final updatedPiezo = calibrationService.piezoThreshold;
-    expect(updatedPiezo, isNot(equals(1800.0)));
-
-    // 5. Navigate back to Overview tab
+    // 5. Navigate to Overview and verify Piezo-Only status
     await tester.tap(find.text('Overview'));
     await tester.pumpAndSettle();
 
-    // Verify Overview reflects Tuned Gate and new threshold in footer
-    expect(find.text('Tuned Gate'), findsOneWidget);
+    expect(find.text('Piezo Only'), findsOneWidget);
+    expect(find.text('Piezo-only gated (Motion gate bypassed)'), findsOneWidget);
     expect(
-      find.text('Gate: Δa < 0.35 m/s² • max(PL,PR) > ${updatedPiezo.toStringAsFixed(0)} ADC'),
+      find.textContaining('Gate: Piezo Only • max(PL,PR) > 1800 ADC (Motion rejection OFF)'),
       findsOneWidget,
     );
 
-    // 6. Navigate back to Sandbox and test 'Reset to Defaults'
+    // 6. Navigate back to Sandbox and switch to 'Motion Only' Mode (disables piezo threshold)
+    await tester.tap(find.text('Sandbox'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Motion Only'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('⊘ Piezo threshold disabled — candidate events detected purely via dynamic IMU motion.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Apply Calibration to App'));
+    await tester.pumpAndSettle();
+
+    expect(calibrationService.isMotionOnly, isTrue);
+    expect(calibrationService.enablePiezoGate, isFalse);
+
+    // 7. Verify Overview in Motion-Only Mode
+    await tester.tap(find.text('Overview'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Motion Only'), findsOneWidget);
+    expect(find.text('Motion-only gated (Piezo threshold bypassed)'), findsOneWidget);
+    expect(
+      find.textContaining('Gate: Motion Only • Δa deviation > 0.35 m/s² (Piezo threshold OFF)'),
+      findsOneWidget,
+    );
+
+    // 8. Return to Sandbox and Reset to Factory Defaults
     await tester.tap(find.text('Sandbox'));
     await tester.pumpAndSettle();
 
@@ -121,16 +137,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Calibration reset to factory defaults'), findsOneWidget);
+    expect(calibrationService.isDualGated, isTrue);
     expect(calibrationService.piezoThreshold, equals(1800.0));
     expect(calibrationService.motionThreshold, equals(0.35));
 
-    // 7. Verify Overview returns to standard calibrated baseline
+    // 9. Verify Overview returns to standard Dual-Sensor baseline
     await tester.tap(find.text('Overview'));
     await tester.pumpAndSettle();
 
     expect(find.text('Calibrated'), findsOneWidget);
     expect(
-      find.text('Gate: Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC'),
+      find.text('Gate: Dual-Sensor • Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC'),
       findsOneWidget,
     );
   });

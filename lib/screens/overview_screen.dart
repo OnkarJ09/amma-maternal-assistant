@@ -102,6 +102,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       piezoThreshold: _calibration.piezoThreshold,
       maternalMotionThreshold: _calibration.motionThreshold,
       enableFiltering: _calibration.enableFiltering,
+      enablePiezoGate: _calibration.enablePiezoGate,
+      enableMotionGate: _calibration.enableMotionGate,
     );
 
     return RefreshIndicator(
@@ -250,11 +252,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   child: const Icon(Icons.favorite_rounded, color: teal, size: 20),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Fetal Movement Activity',
                         style: TextStyle(
                           fontSize: 16,
@@ -263,10 +265,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           letterSpacing: -0.2,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Dual-sensor gated (max(PL, PR) + IMU)',
-                        style: TextStyle(fontSize: 11.5, color: muted),
+                        _calibration.isDualGated
+                            ? 'Dual-sensor gated (max(PL, PR) + IMU)'
+                            : (_calibration.isPiezoOnly
+                                ? 'Piezo-only gated (Motion gate bypassed)'
+                                : 'Motion-only gated (Piezo threshold bypassed)'),
+                        style: const TextStyle(fontSize: 11.5, color: muted),
                       ),
                     ],
                   ),
@@ -274,37 +280,59 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _calibration.isCustomized
-                        ? const Color(0xFFE0F2FE)
-                        : const Color(0xFFE8F5E9),
+                    color: _calibration.isDualGated
+                        ? (_calibration.isCustomized
+                            ? const Color(0xFFE0F2FE)
+                            : const Color(0xFFE8F5E9))
+                        : (_calibration.isPiezoOnly
+                            ? const Color(0xFFFFF7ED)
+                            : const Color(0xFFF3E8FF)),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: _calibration.isCustomized
-                          ? const Color(0xFFBAE6FD)
-                          : const Color(0xFFC8E6C9),
+                      color: _calibration.isDualGated
+                          ? (_calibration.isCustomized
+                              ? const Color(0xFFBAE6FD)
+                              : const Color(0xFFC8E6C9))
+                          : (_calibration.isPiezoOnly
+                              ? const Color(0xFFFFEDD5)
+                              : const Color(0xFFE9D5FF)),
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _calibration.isCustomized
-                            ? Icons.tune_rounded
-                            : Icons.verified_outlined,
+                        _calibration.isDualGated
+                            ? (_calibration.isCustomized
+                                ? Icons.tune_rounded
+                                : Icons.verified_outlined)
+                            : (_calibration.isPiezoOnly
+                                ? Icons.graphic_eq_rounded
+                                : Icons.directions_run_rounded),
                         size: 12,
-                        color: _calibration.isCustomized
-                            ? const Color(0xFF0369A1)
-                            : const Color(0xFF2E7D32),
+                        color: _calibration.isDualGated
+                            ? (_calibration.isCustomized
+                                ? const Color(0xFF0369A1)
+                                : const Color(0xFF2E7D32))
+                            : (_calibration.isPiezoOnly
+                                ? const Color(0xFFC2410C)
+                                : const Color(0xFF7E22CE)),
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _calibration.isCustomized ? 'Tuned Gate' : 'Calibrated',
+                        _calibration.isDualGated
+                            ? (_calibration.isCustomized ? 'Tuned Dual Gate' : 'Calibrated')
+                            : (_calibration.isPiezoOnly ? 'Piezo Only' : 'Motion Only'),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: _calibration.isCustomized
-                              ? const Color(0xFF0369A1)
-                              : const Color(0xFF2E7D32),
+                          color: _calibration.isDualGated
+                              ? (_calibration.isCustomized
+                                  ? const Color(0xFF0369A1)
+                                  : const Color(0xFF2E7D32))
+                              : (_calibration.isPiezoOnly
+                                  ? const Color(0xFFC2410C)
+                                  : const Color(0xFF7E22CE)),
                         ),
                       ),
                     ],
@@ -539,7 +567,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Gate: Δa < ${_calibration.motionThreshold.toStringAsFixed(2)} m/s² • max(PL,PR) > ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC',
+                      _calibration.isDualGated
+                          ? 'Gate: Dual-Sensor • Δa < ${_calibration.motionThreshold.toStringAsFixed(2)} m/s² • max(PL,PR) > ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC'
+                          : (_calibration.isPiezoOnly
+                              ? 'Gate: Piezo Only • max(PL,PR) > ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC (Motion rejection OFF)'
+                              : 'Gate: Motion Only • Δa deviation > ${_calibration.motionThreshold.toStringAsFixed(2)} m/s² (Piezo threshold OFF)'),
                       style: const TextStyle(
                         fontSize: 11,
                         color: muted,

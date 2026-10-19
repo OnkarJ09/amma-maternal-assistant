@@ -98,8 +98,9 @@ class _TrendsScreenState extends State<TrendsScreen> {
             _buildChartCard(
               title: 'Piezoelectric Transducers',
               unit: 'Raw ADC Counts',
-              subtitle:
-                  'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR). Red dashed line shows active kick threshold (${_calibration.piezoThreshold.toStringAsFixed(0)} ADC).',
+              subtitle: _calibration.enablePiezoGate
+                  ? 'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR). Red dashed line shows active kick threshold (${_calibration.piezoThreshold.toStringAsFixed(0)} ADC).'
+                  : 'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR). (Piezo threshold gate disabled in active calibration).',
               chart: _buildPiezoChart(data),
               legendLeft: 'Left Piezo (PL)',
               legendRight: 'Right Piezo (PR)',
@@ -312,7 +313,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
       colorA: const Color(0xFF2F776B),
       colorB: const Color(0xFFC87565),
       maxX: (data.length - 1).clamp(1, 100).toDouble(),
-      thresholdY: _calibration.piezoThreshold,
+      thresholdY: _calibration.enablePiezoGate ? _calibration.piezoThreshold : null,
       valueFormatter: (v) {
         if (v.abs() >= 1000) {
           return '${(v / 1000).toStringAsFixed(1)}k';

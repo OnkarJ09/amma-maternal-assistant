@@ -81,6 +81,8 @@ class SignalProcessor {
     double piezoThreshold = 1800.0,
     double maternalMotionThreshold = 0.35,
     bool enableFiltering = true,
+    bool enablePiezoGate = true,
+    bool enableMotionGate = true,
   }) {
     if (readings.isEmpty) {
       return SignalAnalysisReport(
@@ -143,32 +145,82 @@ class SignalProcessor {
       final isMotherResting = dynamicMotion <= maternalMotionThreshold;
       if (isMotherResting) restingCount++;
 
-      final isSpike = effectiveSpike >= piezoThreshold;
       bool isCandidate = false;
       String? rejectionReason;
 
-      if (isSpike) {
-        if (!isMotherResting) {
-          rejectedArtifacts++;
-          rejectionReason =
-              'Mother active (${dynamicMotion.toStringAsFixed(2)} m/s² > ${maternalMotionThreshold.toStringAsFixed(2)})';
-        } else if (lastCandidateKickTime != null &&
-            r.timestamp.difference(lastCandidateKickTime).inSeconds < 2) {
-          rejectedArtifacts++;
-          rejectionReason = 'Refractory window (< 2s inter-kick)';
-        } else {
-          isCandidate = true;
-          candidateKicks++;
-          lastCandidateKickTime = r.timestamp;
-          candidateKicksList.add(
-            KickEvent(
-              index: i,
-              timestamp: r.timestamp,
-              amplitude: effectiveSpike,
-              dominantChannel: dominantChannel,
-              dynamicMotion: dynamicMotion,
-            ),
-          );
+      if (enablePiezoGate && enableMotionGate) {
+        // Dual-sensor gating: Piezo spike gated by maternal quietude
+        final isSpike = effectiveSpike >= piezoThreshold;
+        if (isSpike) {
+          if (!isMotherResting) {
+            rejectedArtifacts++;
+            rejectionReason =
+                'Mother active (${dynamicMotion.toStringAsFixed(2)} m/s² > ${maternalMotionThreshold.toStringAsFixed(2)})';
+          } else if (lastCandidateKickTime != null &&
+              r.timestamp.difference(lastCandidateKickTime).inSeconds < 2) {
+            rejectedArtifacts++;
+            rejectionReason = 'Refractory window (< 2s inter-kick)';
+          } else {
+            isCandidate = true;
+            candidateKicks++;
+            lastCandidateKickTime = r.timestamp;
+            candidateKicksList.add(
+              KickEvent(
+                index: i,
+                timestamp: r.timestamp,
+                amplitude: effectiveSpike,
+                dominantChannel: dominantChannel,
+                dynamicMotion: dynamicMotion,
+              ),
+            );
+          }
+        }
+      } else if (enablePiezoGate && !enableMotionGate) {
+        // Piezo-only mode: Mother motion gate is completely disabled
+        final isSpike = effectiveSpike >= piezoThreshold;
+        if (isSpike) {
+          if (lastCandidateKickTime != null &&
+              r.timestamp.difference(lastCandidateKickTime).inSeconds < 2) {
+            rejectedArtifacts++;
+            rejectionReason = 'Refractory window (< 2s inter-kick)';
+          } else {
+            isCandidate = true;
+            candidateKicks++;
+            lastCandidateKickTime = r.timestamp;
+            candidateKicksList.add(
+              KickEvent(
+                index: i,
+                timestamp: r.timestamp,
+                amplitude: effectiveSpike,
+                dominantChannel: dominantChannel,
+                dynamicMotion: dynamicMotion,
+              ),
+            );
+          }
+        }
+      } else if (!enablePiezoGate && enableMotionGate) {
+        // Motion-only mode: Piezo threshold is completely disabled
+        // Evaluates high-frequency dynamic acceleration spikes on ML/MR
+        final isMotionSpike = dynamicMotion >= maternalMotionThreshold;
+        if (isMotionSpike) {
+          if (lastCandidateKickTime != null &&
+              r.timestamp.difference(lastCandidateKickTime).inSeconds < 2) {
+            rejectedArtifacts++;
+            rejectionReason = 'Refractory window (< 2s inter-kick)';
+          } else {
+            isCandidate = true;
+            candidateKicks++;
+            lastCandidateKickTime = r.timestamp;
+            candidateKicksList.add(
+              KickEvent(
+                index: i,
+                timestamp: r.timestamp,
+                amplitude: effectiveSpike > 0 ? effectiveSpike : dynamicMotion * 1000,
+                dominantChannel: dominantChannel,
+                dynamicMotion: dynamicMotion,
+              ),
+            );
+          }
         }
       }
 

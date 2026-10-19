@@ -28,6 +28,8 @@ class _SandboxScreenState extends State<SandboxScreen> {
   late double _piezoThreshold;
   late double _motionThreshold;
   late bool _enableFiltering;
+  late bool _enablePiezoGate;
+  late bool _enableMotionGate;
 
   CalibrationService get _calibration =>
       widget.calibrationService ?? CalibrationService.instance;
@@ -35,7 +37,9 @@ class _SandboxScreenState extends State<SandboxScreen> {
   bool get _isSyncedWithApp =>
       _piezoThreshold == _calibration.piezoThreshold &&
       _motionThreshold == _calibration.motionThreshold &&
-      _enableFiltering == _calibration.enableFiltering;
+      _enableFiltering == _calibration.enableFiltering &&
+      _enablePiezoGate == _calibration.enablePiezoGate &&
+      _enableMotionGate == _calibration.enableMotionGate;
 
   @override
   void initState() {
@@ -43,6 +47,8 @@ class _SandboxScreenState extends State<SandboxScreen> {
     _piezoThreshold = _calibration.piezoThreshold;
     _motionThreshold = _calibration.motionThreshold;
     _enableFiltering = _calibration.enableFiltering;
+    _enablePiezoGate = _calibration.enablePiezoGate;
+    _enableMotionGate = _calibration.enableMotionGate;
     _calibration.addListener(_onCalibrationChanged);
   }
 
@@ -57,6 +63,14 @@ class _SandboxScreenState extends State<SandboxScreen> {
     setState(() {});
   }
 
+  void _setGatingMode({required bool piezo, required bool motion}) {
+    if (!piezo && !motion) return;
+    setState(() {
+      _enablePiezoGate = piezo;
+      _enableMotionGate = motion;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     const teal = Color(0xFF2F776B);
@@ -69,6 +83,8 @@ class _SandboxScreenState extends State<SandboxScreen> {
       piezoThreshold: _piezoThreshold,
       maternalMotionThreshold: _motionThreshold,
       enableFiltering: _enableFiltering,
+      enablePiezoGate: _enablePiezoGate,
+      enableMotionGate: _enableMotionGate,
     );
 
     return RefreshIndicator(
@@ -107,6 +123,10 @@ class _SandboxScreenState extends State<SandboxScreen> {
   }
 
   Widget _buildTuningControlsCard(Color teal, Color ink, Color muted) {
+    final isDual = _enablePiezoGate && _enableMotionGate;
+    final isPiezoOnly = _enablePiezoGate && !_enableMotionGate;
+    final isMotionOnly = !_enablePiezoGate && _enableMotionGate;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -134,61 +154,223 @@ class _SandboxScreenState extends State<SandboxScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Piezo Spike Threshold (Bilateral max(PL, PR))',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                Text(
-                  '${_piezoThreshold.toStringAsFixed(0)} ADC',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: teal,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 12),
+
+            // Gating Mode Selector
+            const Text(
+              'GATING MODE EVALUATION',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF73827D),
+                letterSpacing: 0.6,
+              ),
             ),
-            Slider(
-              value: _piezoThreshold,
-              min: 500.0,
-              max: 10000.0,
-              divisions: 38,
-              activeColor: teal,
-              onChanged: (val) => setState(() => _piezoThreshold = val),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Maternal Dynamic Motion Gate (Δa deviation)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(3),
+              child: Row(
+                children: [
+                  _buildModeTab(
+                    label: 'Dual Gate',
+                    isSelected: isDual,
+                    teal: teal,
+                    onTap: () => _setGatingMode(piezo: true, motion: true),
                   ),
-                ),
-                Text(
-                  '${_motionThreshold.toStringAsFixed(2)} m/s²',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: teal,
+                  _buildModeTab(
+                    label: 'Piezo Only',
+                    isSelected: isPiezoOnly,
+                    teal: teal,
+                    onTap: () => _setGatingMode(piezo: true, motion: false),
                   ),
-                ),
-              ],
-            ),
-            Slider(
-              value: _motionThreshold,
-              min: 0.05,
-              max: 1.50,
-              divisions: 29,
-              activeColor: teal,
-              onChanged: (val) => setState(() => _motionThreshold = val),
+                  _buildModeTab(
+                    label: 'Motion Only',
+                    isSelected: isMotionOnly,
+                    teal: teal,
+                    onTap: () => _setGatingMode(piezo: false, motion: true),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 14),
+
+            // Piezo Spike Threshold Section with Toggle
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _enablePiezoGate ? Colors.white : const Color(0xFFF9FAFA),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _enablePiezoGate
+                      ? const Color(0xFFD4E3DD)
+                      : const Color(0xFFE4E9E6),
+                  width: _enablePiezoGate ? 1.2 : 1.0,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.graphic_eq_rounded,
+                        size: 16,
+                        color: _enablePiezoGate ? teal : muted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Piezo Spike Threshold',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _enablePiezoGate ? ink : muted,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _enablePiezoGate
+                            ? '${_piezoThreshold.toStringAsFixed(0)} ADC'
+                            : 'Disabled',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: _enablePiezoGate ? teal : muted,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Switch(
+                        value: _enablePiezoGate,
+                        activeTrackColor: teal,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (val) {
+                          if (!val && !_enableMotionGate) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('At least one gating threshold must remain active.'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            return;
+                          }
+                          setState(() => _enablePiezoGate = val);
+                        },
+                      ),
+                    ],
+                  ),
+                  if (_enablePiezoGate) ...[
+                    const SizedBox(height: 4),
+                    Slider(
+                      value: _piezoThreshold,
+                      min: 500.0,
+                      max: 10000.0,
+                      divisions: 38,
+                      activeColor: teal,
+                      onChanged: (val) => setState(() => _piezoThreshold = val),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      '⊘ Piezo threshold disabled — candidate events detected purely via dynamic IMU motion.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF8B5E34), fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Maternal Dynamic Motion Gate Section with Toggle
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _enableMotionGate ? Colors.white : const Color(0xFFF9FAFA),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _enableMotionGate
+                      ? const Color(0xFFD4E3DD)
+                      : const Color(0xFFE4E9E6),
+                  width: _enableMotionGate ? 1.2 : 1.0,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.directions_run_rounded,
+                        size: 16,
+                        color: _enableMotionGate ? teal : muted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Maternal Motion Gate',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _enableMotionGate ? ink : muted,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _enableMotionGate
+                            ? '${_motionThreshold.toStringAsFixed(2)} m/s²'
+                            : 'Disabled',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: _enableMotionGate ? teal : muted,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Switch(
+                        value: _enableMotionGate,
+                        activeTrackColor: teal,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (val) {
+                          if (!val && !_enablePiezoGate) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('At least one gating threshold must remain active.'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            return;
+                          }
+                          setState(() => _enableMotionGate = val);
+                        },
+                      ),
+                    ],
+                  ),
+                  if (_enableMotionGate) ...[
+                    const SizedBox(height: 4),
+                    Slider(
+                      value: _motionThreshold,
+                      min: 0.05,
+                      max: 1.50,
+                      divisions: 29,
+                      activeColor: teal,
+                      onChanged: (val) => setState(() => _motionThreshold = val),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      '⊘ Maternal motion rejection disabled — all piezo spikes validated without activity filtering.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF8B5E34), fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Sync Status Indicator Banner
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
@@ -217,7 +399,11 @@ class _SandboxScreenState extends State<SandboxScreen> {
                   Expanded(
                     child: Text(
                       _isSyncedWithApp
-                          ? 'App Synced: Overview & Trends are using these thresholds.'
+                          ? (_calibration.isDualGated
+                              ? 'App Synced: Dual-Sensor gating active in Overview & Trends.'
+                              : (_calibration.isPiezoOnly
+                                  ? 'App Synced: Piezo-Only mode active (Motion gate bypassed).'
+                                  : 'App Synced: Motion-Only mode active (Piezo threshold bypassed).'))
                           : 'Local Sandbox Preview: Tap Apply below to update Overview & Trends.',
                       style: TextStyle(
                         fontSize: 11,
@@ -232,6 +418,8 @@ class _SandboxScreenState extends State<SandboxScreen> {
               ),
             ),
             const SizedBox(height: 12),
+
+            // Actions: Apply to App & Reset
             Row(
               children: [
                 Expanded(
@@ -250,14 +438,27 @@ class _SandboxScreenState extends State<SandboxScreen> {
                         piezoThreshold: _piezoThreshold,
                         motionThreshold: _motionThreshold,
                         enableFiltering: _enableFiltering,
+                        enablePiezoGate: _enablePiezoGate,
+                        enableMotionGate: _enableMotionGate,
                       );
                       setState(() {});
+
+                      String feedbackMsg;
+                      if (_enablePiezoGate && _enableMotionGate) {
+                        feedbackMsg =
+                            'Active calibration updated: Dual-Sensor Mode (${_piezoThreshold.toStringAsFixed(0)} ADC, ${_motionThreshold.toStringAsFixed(2)} m/s²). Applied to Overview & Trends!';
+                      } else if (_enablePiezoGate) {
+                        feedbackMsg =
+                            'Active calibration updated: Piezo-Only Mode (${_piezoThreshold.toStringAsFixed(0)} ADC, Motion rejection OFF). Applied to Overview & Trends!';
+                      } else {
+                        feedbackMsg =
+                            'Active calibration updated: Motion-Only Mode (${_motionThreshold.toStringAsFixed(2)} m/s², Piezo threshold OFF). Applied to Overview & Trends!';
+                      }
+
                       ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                            'Active calibration updated: Piezo ${_piezoThreshold.toStringAsFixed(0)} ADC, IMU ${_motionThreshold.toStringAsFixed(2)} m/s². Applied to Overview & Trends!',
-                          ),
+                          content: Text(feedbackMsg),
                           backgroundColor: const Color(0xFF183A36),
                           duration: const Duration(seconds: 3),
                           behavior: SnackBarBehavior.floating,
@@ -295,12 +496,14 @@ class _SandboxScreenState extends State<SandboxScreen> {
                         _piezoThreshold = _calibration.piezoThreshold;
                         _motionThreshold = _calibration.motionThreshold;
                         _enableFiltering = _calibration.enableFiltering;
+                        _enablePiezoGate = _calibration.enablePiezoGate;
+                        _enableMotionGate = _calibration.enableMotionGate;
                       });
                       ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text(
-                            'Calibration reset to factory defaults (1800 ADC, 0.35 m/s²).',
+                            'Calibration reset to factory defaults (Dual gate: 1800 ADC, 0.35 m/s²).',
                           ),
                           duration: const Duration(seconds: 2),
                           behavior: SnackBarBehavior.floating,
@@ -328,6 +531,46 @@ class _SandboxScreenState extends State<SandboxScreen> {
     );
   }
 
+  Widget _buildModeTab({
+    required String label,
+    required bool isSelected,
+    required Color teal,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1.5),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+              color: isSelected ? teal : const Color(0xFF73827D),
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetricsOverview(
     SignalAnalysisReport report,
     Color teal,
@@ -341,7 +584,9 @@ class _SandboxScreenState extends State<SandboxScreen> {
           child: _StatCard(
             label: 'Candidate Kicks',
             value: '${report.candidateKickCount}',
-            unit: 'dual-validated',
+            unit: _enablePiezoGate && _enableMotionGate
+                ? 'dual-validated'
+                : (_enablePiezoGate ? 'piezo-only' : 'motion-only'),
             color: teal,
             bg: const Color(0xFFE6F3EE),
             icon: Icons.check_circle_outline_rounded,
@@ -352,7 +597,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
           child: _StatCard(
             label: 'Rejected Artifacts',
             value: '${report.rejectedArtifactCount}',
-            unit: 'mother active / refractory',
+            unit: _enableMotionGate ? 'mother active / refractory' : 'refractory only (motion OFF)',
             color: coral,
             bg: const Color(0xFFFFEEEA),
             icon: Icons.cancel_outlined,
@@ -429,9 +674,11 @@ class _SandboxScreenState extends State<SandboxScreen> {
               ],
             ),
             const SizedBox(height: 2),
-            const Text(
-              'Red dashed line shows active piezo detection threshold across bilateral sensors.',
-              style: TextStyle(fontSize: 11.5, color: Color(0xFF73827D)),
+            Text(
+              _enablePiezoGate
+                  ? 'Red dashed line shows active piezo detection threshold across bilateral sensors.'
+                  : 'Piezo detection threshold disabled (candidate kicks gated by IMU motion).',
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF73827D)),
             ),
             const SizedBox(height: 18),
             SizedBox(
@@ -459,16 +706,18 @@ class _SandboxScreenState extends State<SandboxScreen> {
                             ),
                           ),
                         ),
-                        extraLinesData: ExtraLinesData(
-                          horizontalLines: [
-                            HorizontalLine(
-                              y: _piezoThreshold,
-                              color: coral.withValues(alpha: 0.8),
-                              strokeWidth: 1.5,
-                              dashArray: [5, 5],
-                            ),
-                          ],
-                        ),
+                        extraLinesData: _enablePiezoGate
+                            ? ExtraLinesData(
+                                horizontalLines: [
+                                  HorizontalLine(
+                                    y: _piezoThreshold,
+                                    color: coral.withValues(alpha: 0.8),
+                                    strokeWidth: 1.5,
+                                    dashArray: [5, 5],
+                                  ),
+                                ],
+                              )
+                            : const ExtraLinesData(),
                         lineBarsData: [
                           LineChartBarData(
                             spots: spotsPl,

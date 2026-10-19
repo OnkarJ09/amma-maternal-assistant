@@ -49,6 +49,8 @@ class KickHistoryService {
     double piezoThreshold = 1800.0,
     double maternalMotionThreshold = 0.35,
     bool enableFiltering = true,
+    bool enablePiezoGate = true,
+    bool enableMotionGate = true,
     DateTime? referenceTime,
   }) {
     final report = processor.analyzeReadings(
@@ -56,6 +58,8 @@ class KickHistoryService {
       piezoThreshold: piezoThreshold,
       maternalMotionThreshold: maternalMotionThreshold,
       enableFiltering: enableFiltering,
+      enablePiezoGate: enablePiezoGate,
+      enableMotionGate: enableMotionGate,
     );
 
     final now = referenceTime ?? DateTime.now();
