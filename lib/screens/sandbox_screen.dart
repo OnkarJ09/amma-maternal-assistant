@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/sensor_reading.dart';
+import '../services/calibration_service.dart';
 import '../services/signal_processor.dart';
 
 class SandboxScreen extends StatefulWidget {
@@ -10,10 +11,12 @@ class SandboxScreen extends StatefulWidget {
     super.key,
     required this.readings,
     required this.onRefresh,
+    this.calibrationService,
   });
 
   final List<SensorReading> readings;
   final Future<void> Function() onRefresh;
+  final CalibrationService? calibrationService;
 
   @override
   State<SandboxScreen> createState() => _SandboxScreenState();
@@ -22,9 +25,37 @@ class SandboxScreen extends StatefulWidget {
 class _SandboxScreenState extends State<SandboxScreen> {
   final _processor = const SignalProcessor();
 
-  double _piezoThreshold = 1800.0;
-  double _motionThreshold = 0.35;
-  bool _enableFiltering = true;
+  late double _piezoThreshold;
+  late double _motionThreshold;
+  late bool _enableFiltering;
+
+  CalibrationService get _calibration =>
+      widget.calibrationService ?? CalibrationService.instance;
+
+  bool get _isSyncedWithApp =>
+      _piezoThreshold == _calibration.piezoThreshold &&
+      _motionThreshold == _calibration.motionThreshold &&
+      _enableFiltering == _calibration.enableFiltering;
+
+  @override
+  void initState() {
+    super.initState();
+    _piezoThreshold = _calibration.piezoThreshold;
+    _motionThreshold = _calibration.motionThreshold;
+    _enableFiltering = _calibration.enableFiltering;
+    _calibration.addListener(_onCalibrationChanged);
+  }
+
+  @override
+  void dispose() {
+    _calibration.removeListener(_onCalibrationChanged);
+    super.dispose();
+  }
+
+  void _onCalibrationChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +187,140 @@ class _SandboxScreenState extends State<SandboxScreen> {
               divisions: 29,
               activeColor: teal,
               onChanged: (val) => setState(() => _motionThreshold = val),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: _isSyncedWithApp
+                    ? const Color(0xFFE6F3EE)
+                    : const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _isSyncedWithApp
+                      ? const Color(0xFFCBE3D9)
+                      : const Color(0xFFFFE082),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _isSyncedWithApp
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.info_outline_rounded,
+                    size: 15,
+                    color: _isSyncedWithApp
+                        ? teal
+                        : const Color(0xFFB77927),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _isSyncedWithApp
+                          ? 'App Synced: Overview & Trends are using these thresholds.'
+                          : 'Local Sandbox Preview: Tap Apply below to update Overview & Trends.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _isSyncedWithApp
+                            ? teal
+                            : const Color(0xFF8B5E34),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      _calibration.applyCalibration(
+                        piezoThreshold: _piezoThreshold,
+                        motionThreshold: _motionThreshold,
+                        enableFiltering: _enableFiltering,
+                      );
+                      setState(() {});
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Active calibration updated: Piezo ${_piezoThreshold.toStringAsFixed(0)} ADC, IMU ${_motionThreshold.toStringAsFixed(2)} m/s². Applied to Overview & Trends!',
+                          ),
+                          backgroundColor: const Color(0xFF183A36),
+                          duration: const Duration(seconds: 3),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.check_circle_rounded, size: 18),
+                    label: const Text(
+                      'Apply Calibration to App',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: ink,
+                      side: const BorderSide(color: Color(0xFFD0D7D4)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      _calibration.resetToDefaults();
+                      setState(() {
+                        _piezoThreshold = _calibration.piezoThreshold;
+                        _motionThreshold = _calibration.motionThreshold;
+                        _enableFiltering = _calibration.enableFiltering;
+                      });
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text(
+                            'Calibration reset to factory defaults (1800 ADC, 0.35 m/s²).',
+                          ),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Reset to Defaults',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

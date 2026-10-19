@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../models/monitoring_session.dart';
 import '../models/sensor_reading.dart';
+import '../services/calibration_service.dart';
 import '../services/kick_history_service.dart';
 
 class OverviewScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class OverviewScreen extends StatefulWidget {
     this.onStopSession,
     this.onViewSessionSummary,
     this.onNavigateToSandbox,
+    this.calibrationService,
   });
 
   final List<SensorReading> readings;
@@ -35,6 +37,7 @@ class OverviewScreen extends StatefulWidget {
   final VoidCallback? onStopSession;
   final VoidCallback? onViewSessionSummary;
   final VoidCallback? onNavigateToSandbox;
+  final CalibrationService? calibrationService;
 
   @override
   State<OverviewScreen> createState() => _OverviewScreenState();
@@ -43,6 +46,25 @@ class OverviewScreen extends StatefulWidget {
 class _OverviewScreenState extends State<OverviewScreen> {
   final KickHistoryService _historyService = KickHistoryService();
   KickHistoryPeriod _selectedPeriod = KickHistoryPeriod.day;
+
+  CalibrationService get _calibration =>
+      widget.calibrationService ?? CalibrationService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _calibration.addListener(_onCalibrationChanged);
+  }
+
+  @override
+  void dispose() {
+    _calibration.removeListener(_onCalibrationChanged);
+    super.dispose();
+  }
+
+  void _onCalibrationChanged() {
+    if (mounted) setState(() {});
+  }
 
   SensorReading? get _latest => widget.readings.isEmpty ? null : widget.readings.last;
 
@@ -75,7 +97,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final reading = _latest;
-    final summary = _historyService.calculateSummary(widget.readings);
+    final summary = _historyService.calculateSummary(
+      widget.readings,
+      piezoThreshold: _calibration.piezoThreshold,
+      maternalMotionThreshold: _calibration.motionThreshold,
+      enableFiltering: _calibration.enableFiltering,
+    );
 
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
@@ -247,21 +274,37 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE8F5E9),
+                    color: _calibration.isCustomized
+                        ? const Color(0xFFE0F2FE)
+                        : const Color(0xFFE8F5E9),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFC8E6C9)),
+                    border: Border.all(
+                      color: _calibration.isCustomized
+                          ? const Color(0xFFBAE6FD)
+                          : const Color(0xFFC8E6C9),
+                    ),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.verified_outlined, size: 12, color: Color(0xFF2E7D32)),
-                      SizedBox(width: 4),
+                      Icon(
+                        _calibration.isCustomized
+                            ? Icons.tune_rounded
+                            : Icons.verified_outlined,
+                        size: 12,
+                        color: _calibration.isCustomized
+                            ? const Color(0xFF0369A1)
+                            : const Color(0xFF2E7D32),
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        'Calibrated',
+                        _calibration.isCustomized ? 'Tuned Gate' : 'Calibrated',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF2E7D32),
+                          color: _calibration.isCustomized
+                              ? const Color(0xFF0369A1)
+                              : const Color(0xFF2E7D32),
                         ),
                       ),
                     ],
@@ -494,10 +537,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 children: [
                   const Icon(Icons.filter_alt_outlined, size: 14, color: teal),
                   const SizedBox(width: 6),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Gate: Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC',
-                      style: TextStyle(
+                      'Gate: Δa < ${_calibration.motionThreshold.toStringAsFixed(2)} m/s² • max(PL,PR) > ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC',
+                      style: const TextStyle(
                         fontSize: 11,
                         color: muted,
                         fontWeight: FontWeight.w600,

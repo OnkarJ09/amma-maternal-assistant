@@ -6,16 +6,19 @@ import 'package:flutter/services.dart';
 
 import '../models/monitoring_session.dart';
 import '../models/sensor_reading.dart';
+import '../services/calibration_service.dart';
 
 class TrendsScreen extends StatefulWidget {
   const TrendsScreen({
     super.key,
     required this.readings,
     required this.onRefresh,
+    this.calibrationService,
   });
 
   final List<SensorReading> readings;
   final Future<void> Function() onRefresh;
+  final CalibrationService? calibrationService;
 
   @override
   State<TrendsScreen> createState() => _TrendsScreenState();
@@ -23,6 +26,25 @@ class TrendsScreen extends StatefulWidget {
 
 class _TrendsScreenState extends State<TrendsScreen> {
   int _sampleCount = 30;
+
+  CalibrationService get _calibration =>
+      widget.calibrationService ?? CalibrationService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _calibration.addListener(_onCalibrationChanged);
+  }
+
+  @override
+  void dispose() {
+    _calibration.removeListener(_onCalibrationChanged);
+    super.dispose();
+  }
+
+  void _onCalibrationChanged() {
+    if (mounted) setState(() {});
+  }
 
   List<SensorReading> get _filteredReadings {
     if (widget.readings.length <= _sampleCount) {
@@ -77,7 +99,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
               title: 'Piezoelectric Transducers',
               unit: 'Raw ADC Counts',
               subtitle:
-                  'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR).',
+                  'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR). Red dashed line shows active kick threshold (${_calibration.piezoThreshold.toStringAsFixed(0)} ADC).',
               chart: _buildPiezoChart(data),
               legendLeft: 'Left Piezo (PL)',
               legendRight: 'Right Piezo (PR)',
@@ -290,6 +312,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
       colorA: const Color(0xFF2F776B),
       colorB: const Color(0xFFC87565),
       maxX: (data.length - 1).clamp(1, 100).toDouble(),
+      thresholdY: _calibration.piezoThreshold,
       valueFormatter: (v) {
         if (v.abs() >= 1000) {
           return '${(v / 1000).toStringAsFixed(1)}k';
@@ -325,6 +348,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
     required Color colorB,
     required double maxX,
     required String Function(double) valueFormatter,
+    double? thresholdY,
   }) {
     if (spotsA.isEmpty && spotsB.isEmpty) {
       return const Center(
@@ -341,6 +365,18 @@ class _TrendsScreenState extends State<TrendsScreen> {
           drawVerticalLine: false,
         ),
         borderData: FlBorderData(show: false),
+        extraLinesData: thresholdY != null
+            ? ExtraLinesData(
+                horizontalLines: [
+                  HorizontalLine(
+                    y: thresholdY,
+                    color: const Color(0xFFC87565).withValues(alpha: 0.75),
+                    strokeWidth: 1.5,
+                    dashArray: [5, 5],
+                  ),
+                ],
+              )
+            : const ExtraLinesData(),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),

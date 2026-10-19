@@ -10,6 +10,7 @@ import 'screens/overview_screen.dart';
 import 'screens/sandbox_screen.dart';
 import 'screens/trends_screen.dart';
 import 'services/ble_service.dart';
+import 'services/calibration_service.dart';
 import 'services/thingspeak_service.dart';
 import 'widgets/ble_scanner_sheet.dart';
 import 'widgets/session_summary_dialog.dart';
@@ -24,10 +25,16 @@ const _paper = Color(0xFFF7F8F4);
 const _muted = Color(0xFF73827D);
 
 class AmmaApp extends StatelessWidget {
-  const AmmaApp({super.key, this.service, this.bleService});
+  const AmmaApp({
+    super.key,
+    this.service,
+    this.bleService,
+    this.calibrationService,
+  });
 
   final ThingSpeakService? service;
   final BleTelemetryService? bleService;
+  final CalibrationService? calibrationService;
 
   @override
   Widget build(BuildContext context) {
@@ -60,16 +67,26 @@ class AmmaApp extends StatelessWidget {
           ),
         ),
       ),
-      home: DashboardScreen(service: service, bleService: bleService),
+      home: DashboardScreen(
+        service: service,
+        bleService: bleService,
+        calibrationService: calibrationService,
+      ),
     );
   }
 }
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.service, this.bleService});
+  const DashboardScreen({
+    super.key,
+    this.service,
+    this.bleService,
+    this.calibrationService,
+  });
 
   final ThingSpeakService? service;
   final BleTelemetryService? bleService;
+  final CalibrationService? calibrationService;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -442,14 +459,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onStopSession: _stopSession,
               onViewSessionSummary: _viewSessionSummary,
               onNavigateToSandbox: () => setState(() => _currentTab = 2),
+              calibrationService: widget.calibrationService,
             ),
             TrendsScreen(
               readings: _readings,
               onRefresh: () => _fetchData(),
+              calibrationService: widget.calibrationService,
             ),
             SandboxScreen(
               readings: _readings,
               onRefresh: () => _fetchData(),
+              calibrationService: widget.calibrationService,
             ),
             DeviceScreen(
               readings: _readings,
