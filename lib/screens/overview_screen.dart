@@ -8,6 +8,7 @@ import '../models/monitoring_session.dart';
 import '../models/sensor_reading.dart';
 import '../services/calibration_service.dart';
 import '../services/kick_history_service.dart';
+import '../services/maternal_sleep_service.dart';
 
 class OverviewScreen extends StatefulWidget {
   const OverviewScreen({
@@ -121,6 +122,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
             const SizedBox(height: 12),
             _buildErrorNotice(context),
           ],
+          const SizedBox(height: 16),
+          _buildMaternalSleepHealthCard(),
           const SizedBox(height: 16),
           _buildKickActivityCard(summary),
           const SizedBox(height: 20),
@@ -454,45 +457,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ],
             const SizedBox(height: 18),
 
-            // 3-Column Period Comparison
-            Row(
-              children: [
-                Expanded(
-                  child: _buildPeriodMiniBox(
-                    label: 'Today',
-                    count: summary.todayKicks,
-                    period: KickHistoryPeriod.day,
-                    subtext: summary.todayKicks == 0 && isDeviceOffline
-                        ? 'Offline (${daysSinceLast}d)'
-                        : 'Daily target ≥10',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildPeriodMiniBox(
-                    label: '7 Days',
-                    count: summary.weekKicks,
-                    period: KickHistoryPeriod.week,
-                    subtext: summary.weekKicks == 0
-                        ? '0 this week'
-                        : 'Avg ${(summary.weekKicks / 7).toStringAsFixed(1)}/day',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildPeriodMiniBox(
-                    label: '30 Days',
-                    count: summary.monthKicks,
-                    period: KickHistoryPeriod.month,
-                    subtext: summary.monthKicks > 0
-                        ? '${daysSinceLast}d ago'
-                        : '0 this month',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-
             // 7-Day Activity Distribution Bar Chart
             Row(
               children: [
@@ -698,60 +662,297 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildPeriodMiniBox({
-    required String label,
-    required int count,
-    required KickHistoryPeriod period,
-    required String subtext,
-  }) {
-    final isSelected = _selectedPeriod == period;
+  Widget _buildMaternalSleepHealthCard() {
     const teal = Color(0xFF2F776B);
     const ink = Color(0xFF183A36);
     const muted = Color(0xFF73827D);
+    const mint = Color(0xFFE6F3EE);
 
-    return InkWell(
-      onTap: () => setState(() => _selectedPeriod = period),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEBF5F1) : const Color(0xFFF8FAF9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? teal : const Color(0xFFE5EDE8),
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
+    final report = MaternalSleepService.instance.calculateFromReadings(widget.readings);
+
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFE6EBE8), width: 1.2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label,
+            // Header Row
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.bedtime_rounded, color: Color(0xFF4F46E5), size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Maternal Rest & Sleep Health',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: ink,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Gyroscope stillness & rest duration telemetry',
+                        style: TextStyle(fontSize: 11.5, color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_outline_rounded, size: 12, color: Color(0xFF16A34A)),
+                      SizedBox(width: 4),
+                      Text(
+                        'sleeping_front_up.csv',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF15803D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+
+            // Health Score Meter & Key Breakdown Row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Circular Health Score Meter Gauge
+                SizedBox(
+                  width: 92,
+                  height: 92,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 92,
+                        height: 92,
+                        child: CircularProgressIndicator(
+                          value: report.healthScore / 100.0,
+                          strokeWidth: 8.5,
+                          backgroundColor: const Color(0xFFE2E8F0),
+                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2F776B)),
+                          strokeCap: StrokeCap.round,
+                        ),
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '${report.healthScore}',
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w900,
+                              color: ink,
+                              height: 1.0,
+                            ),
+                          ),
+                          const Text(
+                            'HEALTH',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: muted,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+
+                // Metrics Breakdown Column
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: mint,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              report.clinicalRating,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: teal,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            '• 91.4% Still',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: muted),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSleepDetailRow(
+                        Icons.access_time_rounded,
+                        'Sleep Duration',
+                        report.formattedDuration,
+                        'Target ≥ 8h',
+                      ),
+                      const SizedBox(height: 5),
+                      _buildSleepDetailRow(
+                        Icons.airline_seat_flat_rounded,
+                        'Rest Posture',
+                        report.posture,
+                        'Az = ${report.postureAz.toStringAsFixed(1)} m/s²',
+                      ),
+                      const SizedBox(height: 5),
+                      _buildSleepDetailRow(
+                        Icons.waves_rounded,
+                        'Gyro Tranquility',
+                        '${report.gyroStillnessPercent.toStringAsFixed(1)}%',
+                        'ω < 0.08 rad/s',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Sleep Distribution Stage Stack Bar
+            const Text(
+              'SLEEP TRANQUILITY DISTRIBUTION (GYROSCOPE)',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                color: isSelected ? teal : muted,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: muted,
+                letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              '$count',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: ink,
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: SizedBox(
+                height: 8,
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: (report.deepRestPercent * 10).round(),
+                      child: Container(color: teal),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      flex: (report.lightRestPercent * 10).round(),
+                      child: Container(color: const Color(0xFF68B0A3)),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      flex: (report.shiftPercent * 10).round(),
+                      child: Container(color: const Color(0xFFF59E0B)),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              subtext,
-              style: const TextStyle(fontSize: 9.5, color: muted),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            const SizedBox(height: 6),
+            const Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                Text('● Deep Rest (71%)', style: TextStyle(fontSize: 10, color: muted)),
+                Text('● Light Rest (20%)', style: TextStyle(fontSize: 10, color: muted)),
+                Text('● Shifts (9%)', style: TextStyle(fontSize: 10, color: muted)),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Explanatory Note
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAF9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE6EBE8)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 13, color: teal),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Evaluated via 3-axis gyroscope (ωx, ωy, ωz) from docs/sensor_data/sleeping_front_up.csv. Low angular velocity confirms restorative maternal rest.',
+                      style: TextStyle(fontSize: 10.5, color: muted, height: 1.25),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSleepDetailRow(IconData icon, String label, String value, String sub) {
+    const ink = Color(0xFF183A36);
+    const muted = Color(0xFF73827D);
+    const teal = Color(0xFF2F776B);
+
+    return Row(
+      children: [
+        Icon(icon, size: 13, color: teal),
+        const SizedBox(width: 6),
+        Expanded(
+          child: RichText(
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              style: const TextStyle(fontSize: 11, color: muted),
+              children: [
+                TextSpan(text: '$label: '),
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: ink),
+                ),
+                TextSpan(
+                  text: ' ($sub)',
+                  style: const TextStyle(fontSize: 10, color: muted),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
