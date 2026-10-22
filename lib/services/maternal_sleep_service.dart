@@ -78,6 +78,7 @@ class SleepEpisode {
     this.posture = 'Front-Up (Supine)',
     this.postureAz = 10.68,
     this.tossAndTurnShifts = 0,
+    this.hasRecordedData = true,
   });
 
   /// Name of the episode (e.g. "Night Sleep", "Afternoon Nap")
@@ -113,18 +114,23 @@ class SleepEpisode {
   /// Micro-movements / shift counts (gyro spikes > 0.5 rad/s)
   final int tossAndTurnShifts;
 
+  /// Whether actual sensor readings were recorded for this episode
+  final bool hasRecordedData;
+
   /// Time interval string (e.g. "10:15 PM – 06:30 AM")
   String get formattedWindow => '$fromTime – $toTime';
 
-  /// In-bed duration formatted as "8h 15m"
+  /// In-bed duration formatted as "8h 15m" or "0h (No Data)"
   String get formattedInBedDuration {
+    if (!hasRecordedData || inBedDurationHours == 0) return '0h';
     final hrs = inBedDurationHours.floor();
     final mins = ((inBedDurationHours - hrs) * 60).round();
     return '${hrs}h ${mins}m';
   }
 
-  /// Actual sleeping duration formatted as "7h 33m"
+  /// Actual sleeping duration formatted as "7h 33m" or "0h"
   String get formattedActualSleepDuration {
+    if (!hasRecordedData || actualSleepDurationHours == 0) return '0h';
     final hrs = actualSleepDurationHours.floor();
     final mins = ((actualSleepDurationHours - hrs) * 60).round();
     return '${hrs}h ${mins}m';
@@ -141,6 +147,7 @@ class SleepEpisode {
 class MaternalSleepReport {
   const MaternalSleepReport({
     required this.healthScore,
+    required this.hasData,
     required this.cycle,
     required this.nightEpisode,
     required this.napEpisode,
@@ -158,11 +165,17 @@ class MaternalSleepReport {
     required this.sourceLabel,
     this.isClinicalBenchmark = false,
     this.isCurrentlySleeping = false,
-    this.currentActivityState = 'Awake / Active',
+    this.currentActivityState = 'Wearable Offline',
+    this.lastReadingTime,
+    this.staleHours = 0.0,
+    this.isStale = false,
   });
 
-  /// Overall composite maternal recovery & sleep score (0 - 100)
-  final int healthScore;
+  /// Overall composite maternal recovery & sleep score (0 - 100), or null if no sleep data
+  final int? healthScore;
+
+  /// Whether valid sleep telemetry was recorded during this daily cycle
+  final bool hasData;
 
   /// The active 24-hour daily tracking cycle (10:00 PM to 10:00 PM next day)
   final DailySleepCycle cycle;
@@ -218,6 +231,18 @@ class MaternalSleepReport {
   /// Real-time activity description
   final String currentActivityState;
 
+  /// Timestamp of the latest sensor reading received from ThingSpeak
+  final DateTime? lastReadingTime;
+
+  /// Hours elapsed since the last feed was received
+  final double staleHours;
+
+  /// True if telemetry is stale (> 4 hours old) or device is offline
+  final bool isStale;
+
+  /// Score display string ('--' when offline / no data)
+  String get scoreDisplay => hasData && healthScore != null ? '$healthScore' : '--';
+
   // In-bed duration getters
   double get nightSleepHours => nightEpisode.inBedDurationHours;
   double get napHours => napEpisode.inBedDurationHours;
@@ -228,30 +253,32 @@ class MaternalSleepReport {
   double get actualNapSleepHours => napEpisode.actualSleepDurationHours;
   double get totalActualSleepHours => actualNightSleepHours + actualNapSleepHours;
 
-  /// Total sleep duration in bed (formatted e.g. "9h 30m")
+  /// Total sleep duration in bed (formatted e.g. "9h 30m" or "0h (Offline)")
   String get formattedTotalDuration {
+    if (!hasData && totalSleepHours == 0) return '0h 0m (Offline)';
     final hrs = totalSleepHours.floor();
     final mins = ((totalSleepHours - hrs) * 60).round();
     return '${hrs}h ${mins}m';
   }
 
-  /// Total actual verified sleep duration (formatted e.g. "8h 40m")
+  /// Total actual verified sleep duration (formatted e.g. "8h 40m" or "0h")
   String get formattedTotalActualDuration {
+    if (!hasData && totalActualSleepHours == 0) return '0h 0m';
     final hrs = totalActualSleepHours.floor();
     final mins = ((totalActualSleepHours - hrs) * 60).round();
     return '${hrs}h ${mins}m';
   }
 
-  /// Overnight sleep in bed duration (formatted e.g. "8h 15m")
+  /// Overnight sleep in bed duration
   String get formattedNightDuration => nightEpisode.formattedInBedDuration;
 
-  /// Overnight verified sleep duration (formatted e.g. "7h 32m")
+  /// Overnight verified sleep duration
   String get formattedNightActualDuration => nightEpisode.formattedActualSleepDuration;
 
-  /// Afternoon nap in bed duration (formatted e.g. "1h 15m")
+  /// Afternoon nap in bed duration
   String get formattedNapDuration => napEpisode.formattedInBedDuration;
 
-  /// Afternoon verified nap duration (formatted e.g. "1h 08m")
+  /// Afternoon verified nap duration
   String get formattedNapActualDuration => napEpisode.formattedActualSleepDuration;
 
   // Backward compatibility getters
@@ -267,8 +294,8 @@ class MaternalSleepService {
 
   static const MaternalSleepService instance = MaternalSleepService();
 
-  /// Clinical benchmark analysis computed from the scheduled circadian windows
-  /// and mapped to ThingSpeak Channel 3465279 cloud telemetry:
+  /// Clinical benchmark analysis representing a fully completed nocturnal
+  /// and afternoon sleep session:
   /// - Daily Cycle: 10:00 PM to 10:00 PM next day
   /// - Main night sleep: 10:15 PM to 6:30 AM (8.25 hrs in bed, 7.54 hrs actual sleep)
   /// - Afternoon nap: 1:15 PM to 2:30 PM (1.25 hrs in bed, 1.13 hrs actual sleep)
@@ -319,6 +346,7 @@ class MaternalSleepService {
       posture: 'Front-Up (Supine)',
       postureAz: 10.68,
       tossAndTurnShifts: 28,
+      hasRecordedData: true,
     );
 
     final napEpisode = SleepEpisode(
@@ -333,10 +361,12 @@ class MaternalSleepService {
       posture: 'Front-Up (Supine)',
       postureAz: 10.65,
       tossAndTurnShifts: 4,
+      hasRecordedData: true,
     );
 
     return MaternalSleepReport(
       healthScore: finalScore,
+      hasData: true,
       cycle: cycle,
       nightEpisode: nightEpisode,
       napEpisode: napEpisode,
@@ -359,28 +389,49 @@ class MaternalSleepService {
       isClinicalBenchmark: false,
       isCurrentlySleeping: false,
       currentActivityState: 'Awake / Active',
+      isStale: false,
+      staleHours: 0.0,
     );
   }
 
   /// Calculates a sleep health report from maternal circadian schedule rules
   /// tracked directly from ThingSpeak Channel 3465279 feeds within the active
   /// daily 10:00 PM to 10:00 PM window.
+  ///
+  /// If the wearable was offline / inactive during the nocturnal sleep window
+  /// (e.g. last feed was logged > 4 hours ago, or zero readings between 10 PM and 7 AM),
+  /// the service honestly reports `hasData: false` and `healthScore: null` ('--')
+  /// rather than fabricating a completed sleep score.
   MaternalSleepReport calculateFromReadings(
     List<SensorReading> readings, {
     DateTime? referenceTime,
     double defaultNightHours = 8.25,
     double defaultNapHours = 1.25,
     String defaultSourceLabel = 'ThingSpeak (3465279)',
+    bool fallbackToBenchmark = false,
   }) {
     final now = referenceTime ?? DateTime.now();
     final cycle = DailySleepCycle.forDateTime(now);
 
     if (readings.isEmpty) {
-      return getClinicalSleepReport(
-        referenceTime: now,
-        sourceLabel: defaultSourceLabel,
+      if (fallbackToBenchmark) {
+        return getClinicalSleepReport(
+          referenceTime: now,
+          sourceLabel: defaultSourceLabel,
+        );
+      }
+      return _buildOfflineReport(
+        cycle: cycle,
+        now: now,
+        lastLog: null,
+        staleHours: 999.0,
+        sourceLabel: 'ThingSpeak (No Feeds)',
       );
     }
+
+    final lastLog = readings.last.timestamp;
+    final staleHours = max(0.0, now.difference(lastLog).inMinutes / 60.0);
+    final isStale = staleHours > 4.0;
 
     // Filter readings to the active 24h daily tracking cycle: cycle.startTime to cycle.endTime
     final cycleReadings = readings.where((r) {
@@ -388,10 +439,44 @@ class MaternalSleepService {
              r.timestamp.isBefore(cycle.endTime.add(const Duration(seconds: 1)));
     }).toList();
 
-    // If active cycle slice is empty, evaluate all available ThingSpeak feeds
+    // Check for readings specifically during the nocturnal window (10 PM to 7 AM)
+    final nightReadings = cycleReadings.where((r) {
+      final hour = r.timestamp.hour;
+      return hour >= 22 || hour < 7;
+    }).toList();
+
+    // Check for readings during afternoon nap window (1 PM to 3 PM)
+    final napReadings = cycleReadings.where((r) {
+      final hour = r.timestamp.hour;
+      return hour >= 13 && hour < 15;
+    }).toList();
+
+    // Check for readings during restricted window (3:30 PM to 10 PM)
+    final lateReadings = cycleReadings.where((r) {
+      final hour = r.timestamp.hour;
+      final minute = r.timestamp.minute;
+      return (hour == 15 && minute >= 30) || (hour > 15 && hour < 22);
+    }).toList();
+
+    // IF NO SLEEP DATA EXISTS IN THE ACTIVE CYCLE (wearable offline all night):
+    final hasNightData = nightReadings.isNotEmpty;
+    final hasNapData = napReadings.isNotEmpty;
+    if (!hasNightData && !hasNapData && !fallbackToBenchmark) {
+      final staleLabel = staleHours < 100
+          ? 'ThingSpeak (${staleHours.toStringAsFixed(0)}h Stale)'
+          : 'ThingSpeak (Offline)';
+      return _buildOfflineReport(
+        cycle: cycle,
+        now: now,
+        lastLog: lastLog,
+        staleHours: staleHours,
+        sourceLabel: staleLabel,
+      );
+    }
+
+    // Process actual sleep readings
     final targetReadings = cycleReadings.isNotEmpty ? cycleReadings : readings;
 
-    // Calculate actual telemetry metrics from the ThingSpeak feeds
     int stillCount = 0;
     double sumAz = 0;
     int shifts = 0;
@@ -402,7 +487,6 @@ class MaternalSleepService {
       final mr = r.mrMagnitude ?? ml;
       sumAz += ml;
 
-      // Stillness: dynamic deviation is minimal (< 0.25 m/s²) and recumbent posture
       final isStill = (ml - 10.68).abs() < 0.25 ||
           ((ml - 9.80).abs() < 0.25 && (mr - 9.80).abs() < 0.25);
       if (isStill) stillCount++;
@@ -422,24 +506,6 @@ class MaternalSleepService {
     final postureLabel = measuredAz > 10.2
         ? 'Front-Up (Supine)'
         : (measuredAz > 9.0 ? 'Lateral Rest' : 'Upright');
-
-    // Partition readings by circadian windows
-    final nightReadings = <SensorReading>[];
-    final napReadings = <SensorReading>[];
-    final lateReadings = <SensorReading>[];
-
-    for (final r in targetReadings) {
-      final hour = r.timestamp.hour;
-      final minute = r.timestamp.minute;
-
-      if (hour >= 22 || hour < 7) {
-        nightReadings.add(r);
-      } else if (hour >= 13 && hour < 15) {
-        napReadings.add(r);
-      } else if ((hour == 15 && minute >= 30) || (hour > 15 && hour < 22)) {
-        lateReadings.add(r);
-      }
-    }
 
     // Evaluate night episode
     final nightEpisode = _evaluateEpisode(
@@ -503,6 +569,7 @@ class MaternalSleepService {
 
     return MaternalSleepReport(
       healthScore: finalScore,
+      hasData: true,
       cycle: cycle,
       nightEpisode: nightEpisode,
       napEpisode: napEpisode,
@@ -525,6 +592,83 @@ class MaternalSleepService {
       isClinicalBenchmark: false,
       isCurrentlySleeping: isStillNow,
       currentActivityState: currentActivity,
+      lastReadingTime: lastLog,
+      staleHours: staleHours,
+      isStale: isStale,
+    );
+  }
+
+  static MaternalSleepReport _buildOfflineReport({
+    required DailySleepCycle cycle,
+    required DateTime now,
+    required DateTime? lastLog,
+    required double staleHours,
+    required String sourceLabel,
+  }) {
+    final staleStr = staleHours < 100
+        ? '${staleHours.toStringAsFixed(0)}h ago'
+        : 'unknown';
+
+    const nightEpisode = SleepEpisode(
+      title: 'Night Sleep',
+      fromTime: '10:00 PM',
+      toTime: '07:00 AM',
+      inBedDurationHours: 0.0,
+      actualSleepDurationHours: 0.0,
+      gyroStillnessPercent: 0.0,
+      isActuallySleeping: false,
+      statusLabel: 'Offline (No Data)',
+      posture: 'Offline',
+      postureAz: 0.0,
+      tossAndTurnShifts: 0,
+      hasRecordedData: false,
+    );
+
+    final isBeforeNap = now.hour < 13;
+    final isDuringNap = now.hour >= 13 && now.hour < 15;
+    final napEpisode = SleepEpisode(
+      title: 'Afternoon Nap',
+      fromTime: '01:00 PM',
+      toTime: '03:00 PM',
+      inBedDurationHours: 0.0,
+      actualSleepDurationHours: 0.0,
+      gyroStillnessPercent: 0.0,
+      isActuallySleeping: false,
+      statusLabel: isBeforeNap
+          ? 'Upcoming (1 PM–3 PM)'
+          : (isDuringNap ? 'In Progress (Awaiting Data)' : 'No Nap Logged'),
+      posture: 'Offline',
+      postureAz: 0.0,
+      tossAndTurnShifts: 0,
+      hasRecordedData: false,
+    );
+
+    return MaternalSleepReport(
+      healthScore: null,
+      hasData: false,
+      cycle: cycle,
+      nightEpisode: nightEpisode,
+      napEpisode: napEpisode,
+      lateSleepHours: 0.0,
+      gyroStillnessPercent: 0.0,
+      meanAngularVelocity: 0.0,
+      posture: 'Wearable Offline',
+      postureAz: 0.0,
+      tossAndTurnShifts: 0,
+      clinicalRating: 'No Sleep Data (Wearable Offline)',
+      clinicalNotes: lastLog != null
+          ? 'Wearable last synced $staleStr (${_formatTime(lastLog)}). The belt was offline during last night\'s 10:00 PM–7:00 AM sleep window, so no nocturnal telemetry was logged.'
+          : 'No ThingSpeak telemetry received. Ensure the wearable belt is powered on and connected.',
+      deepRestPercent: 0.0,
+      lightRestPercent: 0.0,
+      shiftPercent: 0.0,
+      sourceLabel: sourceLabel,
+      isClinicalBenchmark: false,
+      isCurrentlySleeping: false,
+      currentActivityState: 'Wearable Offline',
+      lastReadingTime: lastLog,
+      staleHours: staleHours,
+      isStale: true,
     );
   }
 
@@ -555,6 +699,7 @@ class MaternalSleepService {
         posture: channelPosture,
         postureAz: channelAz,
         tossAndTurnShifts: title == 'Night Sleep' ? 28 : 4,
+        hasRecordedData: false,
       );
     }
 
@@ -598,6 +743,7 @@ class MaternalSleepService {
       posture: channelPosture,
       postureAz: sumAz / episodeReadings.length,
       tossAndTurnShifts: shifts,
+      hasRecordedData: true,
     );
   }
 

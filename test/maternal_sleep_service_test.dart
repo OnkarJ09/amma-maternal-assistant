@@ -57,31 +57,79 @@ void main() {
       expect(report.napEpisode.actualSleepDurationHours, greaterThan(1.0));
     });
 
-    test('calculateFromReadings falls back to circadian benchmark on empty readings', () {
+    test('calculateFromReadings returns offline report with score null and scoreDisplay -- on empty readings', () {
       final report = service.calculateFromReadings([]);
+      expect(report.hasData, isFalse);
+      expect(report.healthScore, isNull);
+      expect(report.scoreDisplay, equals('--'));
+      expect(report.isStale, isTrue);
+      expect(report.clinicalRating, contains('No Sleep Data (Wearable Offline)'));
+      expect(report.nightEpisode.hasRecordedData, isFalse);
+      expect(report.napEpisode.hasRecordedData, isFalse);
+    });
+
+    test('calculateFromReadings falls back to circadian benchmark when explicitly requested', () {
+      final report = service.calculateFromReadings([], fallbackToBenchmark: true);
+      expect(report.hasData, isTrue);
       expect(report.healthScore, equals(98));
+      expect(report.scoreDisplay, equals('98'));
       expect(report.formattedTotalDuration, equals('9h 30m'));
       expect(report.gyroStillnessPercent, equals(91.4));
       expect(report.nightEpisode.isActuallySleeping, isTrue);
       expect(report.napEpisode.isActuallySleeping, isTrue);
     });
 
-    test('calculateFromReadings applies penalty when sleep occurs after 3:30 PM', () {
+    test('calculateFromReadings marks report as offline/stale when telemetry is 16h old', () {
+      // Last reading 16 hours ago at 6:56 PM yesterday (Oct 21 18:56)
+      final staleReading = SensorReading(
+        entryId: 570,
+        timestamp: DateTime(2026, 10, 21, 18, 56),
+        mlMagnitude: 9.80,
+      );
+      final report = service.calculateFromReadings(
+        [staleReading],
+        referenceTime: DateTime(2026, 10, 22, 11, 0),
+      );
+      expect(report.hasData, isFalse);
+      expect(report.healthScore, isNull);
+      expect(report.scoreDisplay, equals('--'));
+      expect(report.isStale, isTrue);
+      expect(report.staleHours, greaterThan(15.0));
+      expect(report.clinicalRating, contains('Wearable Offline'));
+      expect(report.clinicalNotes, contains('offline'));
+    });
+
+    test('calculateFromReadings applies penalty when sleep occurs after 3:30 PM alongside active cycle readings', () {
+      final cycleStart = DateTime(2026, 10, 21, 23, 0); // 11:00 PM night sleep
       final lateTime = DateTime(2026, 10, 22, 16, 0); // 4:00 PM (restricted zone)
-      final readings = List.generate(
-        25,
+
+      // Provide night sleep readings so hasNightData is true
+      final nightReadings = List.generate(
+        30,
         (i) => SensorReading(
           entryId: i + 1,
-          timestamp: lateTime.add(Duration(seconds: i * 15)),
-          mlMagnitude: 9.80,
+          timestamp: cycleStart.add(Duration(minutes: i * 10)),
+          mlMagnitude: 10.68, // Front-up resting
+          mrMagnitude: 9.80,
+        ),
+      );
+
+      // Provide late sleep readings after 3:30 PM
+      final lateReadings = List.generate(
+        30,
+        (i) => SensorReading(
+          entryId: 100 + i,
+          timestamp: lateTime.add(Duration(seconds: i * 20)),
+          mlMagnitude: 10.68,
           mrMagnitude: 9.80,
         ),
       );
 
       final report = service.calculateFromReadings(
-        readings,
+        [...nightReadings, ...lateReadings],
         referenceTime: DateTime(2026, 10, 22, 17, 0),
       );
+      expect(report.hasData, isTrue);
       expect(report.lateSleepHours, greaterThan(0.0));
       expect(report.healthScore, lessThan(98));
       expect(report.clinicalNotes, contains('Late sleep after 3:30 PM detected'));

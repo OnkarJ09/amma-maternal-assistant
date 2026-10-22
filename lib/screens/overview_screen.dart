@@ -719,21 +719,27 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
+                    color: report.isStale ? const Color(0xFFFEF3C7) : const Color(0xFFF0FDF4),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                    border: Border.all(
+                      color: report.isStale ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.cloud_done_rounded, size: 12, color: Color(0xFF16A34A)),
+                      Icon(
+                        report.isStale ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
+                        size: 12,
+                        color: report.isStale ? const Color(0xFFD97706) : const Color(0xFF16A34A),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         report.sourceLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF15803D),
+                          color: report.isStale ? const Color(0xFFB45309) : const Color(0xFF15803D),
                         ),
                       ),
                     ],
@@ -801,10 +807,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         width: 92,
                         height: 92,
                         child: CircularProgressIndicator(
-                          value: report.healthScore / 100.0,
+                          value: report.hasData && report.healthScore != null
+                              ? report.healthScore! / 100.0
+                              : 0.0,
                           strokeWidth: 8.5,
                           backgroundColor: const Color(0xFFE2E8F0),
-                          valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2F776B)),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            report.hasData ? const Color(0xFF2F776B) : const Color(0xFF94A3B8),
+                          ),
                           strokeCap: StrokeCap.round,
                         ),
                       ),
@@ -812,18 +822,18 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            '${report.healthScore}',
-                            style: const TextStyle(
-                              fontSize: 26,
+                            report.scoreDisplay,
+                            style: TextStyle(
+                              fontSize: report.hasData ? 26 : 22,
                               fontWeight: FontWeight.w900,
-                              color: ink,
+                              color: report.hasData ? ink : const Color(0xFF64748B),
                               height: 1.0,
                             ),
                           ),
-                          const Text(
-                            'HEALTH',
-                            style: TextStyle(
-                              fontSize: 9.5,
+                          Text(
+                            report.hasData ? 'HEALTH' : 'NO DATA',
+                            style: const TextStyle(
+                              fontSize: 8.5,
                               fontWeight: FontWeight.w700,
                               color: muted,
                               letterSpacing: 0.8,
@@ -849,22 +859,23 @@ class _OverviewScreenState extends State<OverviewScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: mint,
+                              color: report.hasData ? mint : const Color(0xFFFEF3C7),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
                               report.clinicalRating,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w800,
-                                color: teal,
+                                color: report.hasData ? teal : const Color(0xFFB45309),
                               ),
                             ),
                           ),
-                          const Text(
-                            '• 91.4% Still',
-                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: muted),
-                          ),
+                          if (report.hasData)
+                            Text(
+                              '• ${report.gyroStillnessPercent.toStringAsFixed(1)}% Still',
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: muted),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -877,6 +888,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         actualDuration: report.nightEpisode.formattedActualSleepDuration,
                         isActuallySleeping: report.nightEpisode.isActuallySleeping,
                         gyroStillness: report.nightEpisode.gyroStillnessPercent,
+                        hasData: report.nightEpisode.hasRecordedData,
+                        statusBadge: report.nightEpisode.statusLabel,
                       ),
                       const SizedBox(height: 6),
                       _buildSleepEpisodeRow(
@@ -888,6 +901,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         actualDuration: report.napEpisode.formattedActualSleepDuration,
                         isActuallySleeping: report.napEpisode.isActuallySleeping,
                         gyroStillness: report.napEpisode.gyroStillnessPercent,
+                        hasData: report.napEpisode.hasRecordedData,
+                        statusBadge: report.napEpisode.statusLabel,
                       ),
                       const SizedBox(height: 5),
                       _buildSleepDetailRow(
@@ -895,15 +910,17 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         'Sleep > 3:30 PM',
                         report.lateSleepHours > 0
                             ? '${report.lateSleepHours.toStringAsFixed(1)}h'
-                            : 'None',
+                            : (report.hasData ? 'None' : 'None Logged'),
                         'Avoided',
                       ),
                       const SizedBox(height: 4),
                       _buildSleepDetailRow(
                         Icons.airline_seat_flat_rounded,
                         'Rest Posture',
-                        report.posture,
-                        'Az = ${report.postureAz.toStringAsFixed(1)} m/s²',
+                        report.hasData ? report.posture : 'Offline',
+                        report.hasData
+                            ? 'Az = ${report.postureAz.toStringAsFixed(1)} m/s²'
+                            : 'No Signal',
                       ),
                     ],
                   ),
@@ -914,7 +931,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
             // Circadian Schedule Distribution Bar
             Text(
-              'CIRCADIAN REST DISTRIBUTION (${report.formattedTotalDuration} IN BED • ${report.formattedTotalActualDuration} ACTUAL SLEEP)',
+              report.hasData
+                  ? 'CIRCADIAN REST DISTRIBUTION (${report.formattedTotalDuration} IN BED • ${report.formattedTotalActualDuration} ACTUAL SLEEP)'
+                  : 'CIRCADIAN REST DISTRIBUTION (AWAITING SLEEP TELEMETRY)',
               style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -927,19 +946,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
               borderRadius: BorderRadius.circular(5),
               child: SizedBox(
                 height: 8,
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: (report.nightSleepHours * 10).round(),
-                      child: Container(color: teal),
-                    ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      flex: (report.napHours * 10).round(),
-                      child: Container(color: const Color(0xFF68B0A3)),
-                    ),
-                  ],
-                ),
+                child: report.hasData
+                    ? Row(
+                        children: [
+                          Expanded(
+                            flex: (report.nightSleepHours * 10).round(),
+                            child: Container(color: teal),
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            flex: (report.napHours * 10).round(),
+                            child: Container(color: const Color(0xFF68B0A3)),
+                          ),
+                        ],
+                      )
+                    : Container(color: const Color(0xFFE2E8F0)),
               ),
             ),
             const SizedBox(height: 6),
@@ -947,29 +968,57 @@ class _OverviewScreenState extends State<OverviewScreen> {
               spacing: 12,
               runSpacing: 4,
               children: [
-                Text('● Night: ${report.nightEpisode.formattedWindow} (${report.nightEpisode.formattedInBedDuration})', style: const TextStyle(fontSize: 10, color: muted)),
-                Text('● Nap: ${report.napEpisode.formattedWindow} (${report.napEpisode.formattedInBedDuration})', style: const TextStyle(fontSize: 10, color: muted)),
-                const Text('● Zero Sleep After 3:30 PM', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
+                Text(
+                  report.hasData
+                      ? '● Night: ${report.nightEpisode.formattedWindow} (${report.nightEpisode.formattedInBedDuration})'
+                      : '● Night: 10 PM–7 AM (0h logged • Belt Offline)',
+                  style: const TextStyle(fontSize: 10, color: muted),
+                ),
+                Text(
+                  report.hasData
+                      ? '● Nap: ${report.napEpisode.formattedWindow} (${report.napEpisode.formattedInBedDuration})'
+                      : '● Nap: 1 PM–3 PM (Pending)',
+                  style: const TextStyle(fontSize: 10, color: muted),
+                ),
+                Text(
+                  '● Sleep After 3:30 PM: ${report.lateSleepHours > 0 ? "${report.lateSleepHours.toStringAsFixed(1)}h" : "None"}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: report.lateSleepHours > 0 ? const Color(0xFFD97706) : const Color(0xFF2E7D32),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
 
-            // Explanatory Note
+            // Explanatory / Stale Telemetry Warning Note
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAF9),
+                color: report.isStale ? const Color(0xFFFFFBEB) : const Color(0xFFF8FAF9),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE6EBE8)),
+                border: Border.all(
+                  color: report.isStale ? const Color(0xFFFDE68A) : const Color(0xFFE6EBE8),
+                ),
               ),
-              child: const Row(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline_rounded, size: 13, color: teal),
-                  SizedBox(width: 6),
+                  Icon(
+                    report.isStale ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
+                    size: 14,
+                    color: report.isStale ? const Color(0xFFD97706) : teal,
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Daily 10:00 PM–10:00 PM tracking: Updated from ThingSpeak Channel 3465279. 3-axis gyro and posture telemetry verifies if the mother was actually sleeping (angular velocity & Az ≈ 10.7 m/s²).',
-                      style: TextStyle(fontSize: 10.5, color: muted, height: 1.25),
+                      report.clinicalNotes,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: report.isStale ? const Color(0xFF92400E) : muted,
+                        height: 1.25,
+                      ),
                     ),
                   ),
                 ],
@@ -990,10 +1039,16 @@ class _OverviewScreenState extends State<OverviewScreen> {
     required String actualDuration,
     required bool isActuallySleeping,
     required double gyroStillness,
+    bool hasData = true,
+    String? statusBadge,
   }) {
     const ink = Color(0xFF183A36);
     const muted = Color(0xFF73827D);
     const teal = Color(0xFF2F776B);
+
+    final badgeText = statusBadge ??
+        (isActuallySleeping ? 'Asleep ✓' : (hasData ? 'Awake' : 'No Data'));
+    final isPositive = isActuallySleeping;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1017,15 +1072,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
-                color: isActuallySleeping ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                color: isPositive
+                    ? const Color(0xFFDCFCE7)
+                    : (hasData ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9)),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                isActuallySleeping ? 'Asleep ✓' : 'Awake',
+                badgeText,
                 style: TextStyle(
                   fontSize: 8.5,
                   fontWeight: FontWeight.w800,
-                  color: isActuallySleeping ? const Color(0xFF166534) : const Color(0xFF92400E),
+                  color: isPositive
+                      ? const Color(0xFF166534)
+                      : (hasData ? const Color(0xFF92400E) : const Color(0xFF64748B)),
                 ),
               ),
             ),
@@ -1035,7 +1094,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
         Padding(
           padding: const EdgeInsets.only(left: 16.5),
           child: Text(
-            '$fromTime – $toTime ($inBedDuration bed • $actualDuration actual sleep)',
+            hasData
+                ? '$fromTime – $toTime ($inBedDuration bed • $actualDuration actual sleep)'
+                : 'Window: $fromTime – $toTime (0h recorded • Wearable offline)',
             style: const TextStyle(fontSize: 9.5, color: muted, fontWeight: FontWeight.w500),
           ),
         ),
