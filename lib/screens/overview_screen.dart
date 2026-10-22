@@ -710,7 +710,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'Gyroscope stillness & rest duration telemetry',
+                        'Longitudinal telemetry from ThingSpeak Channel 3465279',
                         style: TextStyle(fontSize: 11.5, color: muted),
                       ),
                     ],
@@ -723,14 +723,14 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: const Color(0xFFBBF7D0)),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle_outline_rounded, size: 12, color: Color(0xFF16A34A)),
-                      SizedBox(width: 4),
+                      const Icon(Icons.cloud_done_rounded, size: 12, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 4),
                       Text(
-                        'sleeping_front_up.csv',
-                        style: TextStyle(
+                        report.sourceLabel,
+                        style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF15803D),
@@ -968,7 +968,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Daily 10:00 PM–10:00 PM tracking: Updated daily and resets nightly at 10 PM. 3-axis gyro telemetry verifies if the mother was actually sleeping (angular velocity < 0.08 rad/s) based on sleeping_front_up.csv.',
+                      'Daily 10:00 PM–10:00 PM tracking: Updated from ThingSpeak Channel 3465279. 3-axis gyro and posture telemetry verifies if the mother was actually sleeping (angular velocity & Az ≈ 10.7 m/s²).',
                       style: TextStyle(fontSize: 10.5, color: muted, height: 1.25),
                     ),
                   ),

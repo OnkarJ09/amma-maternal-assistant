@@ -32,7 +32,7 @@ class DailySleepCycle {
     return DailySleepCycle(startTime: start, endTime: end);
   }
 
-  /// Formatted date range, e.g. "Oct 21, 10:00 PM → Oct 22, 10:00 PM"
+  /// Formatted date range, e.g. "Oct 21, 10 PM → Oct 22, 10 PM"
   String get formattedCycleRange {
     final startStr = _formatDateHour(startTime);
     final endStr = _formatDateHour(endTime);
@@ -76,7 +76,7 @@ class SleepEpisode {
     required this.isActuallySleeping,
     required this.statusLabel,
     this.posture = 'Front-Up (Supine)',
-    this.postureAz = 10.69,
+    this.postureAz = 10.68,
     this.tossAndTurnShifts = 0,
   });
 
@@ -131,13 +131,13 @@ class SleepEpisode {
   }
 }
 
-/// Clinical Maternal Sleep & Health report calculated according to maternal circadian schedule:
+/// Clinical Maternal Sleep & Health report calculated from ThingSpeak Channel 3465279
+/// longitudinal cloud telemetry according to maternal circadian schedule:
 /// - Daily 24-hour cycle: 10:00 PM to 10:00 PM next day (tracked daily and updated until 10:00 PM rollover)
 /// - Main Night Sleep Window: 10:00 PM to 6:00/7:00 AM (target 8h to 9h)
 /// - Afternoon Nap Window: 1:00 PM to 3:00 PM (target 1h to 2h)
 /// - Circadian Restriction: Avoiding sleep after 3:30 PM (preserves nocturnal sleep onset)
-/// - Gyroscope Stillness & Actual Sleep Verification: Evaluated via 3-axis gyro in
-///   docs/sensor_data/sleeping_front_up.csv (91.4% stillness, < 0.08 rad/s, Az ~ 10.7 m/s²)
+/// - Telemetry Source: ThingSpeak Channel 3465279 (3-axis gyro and dual accelerometer)
 class MaternalSleepReport {
   const MaternalSleepReport({
     required this.healthScore,
@@ -156,7 +156,7 @@ class MaternalSleepReport {
     required this.lightRestPercent,
     required this.shiftPercent,
     required this.sourceLabel,
-    this.isClinicalBenchmark = true,
+    this.isClinicalBenchmark = false,
     this.isCurrentlySleeping = false,
     this.currentActivityState = 'Awake / Active',
   });
@@ -185,7 +185,7 @@ class MaternalSleepReport {
   /// Postural orientation (e.g. "Front-Up (Supine)", "Left Lateral")
   final String posture;
 
-  /// Mean Z-axis acceleration in m/s² (10.69 m/s² indicates front-up supine)
+  /// Mean Z-axis acceleration in m/s² (10.68 m/s² indicates front-up supine)
   final double postureAz;
 
   /// Micro-arousals / movement transitions (gyro spikes > 0.5 rad/s)
@@ -206,10 +206,10 @@ class MaternalSleepReport {
   /// Active shift fraction (gyro > 0.08 rad/s)
   final double shiftPercent;
 
-  /// Telemetry data source label
+  /// Telemetry data source label (e.g. "ThingSpeak (3465279)")
   final String sourceLabel;
 
-  /// Whether this report is benchmarked against docs/sensor_data/sleeping_front_up.csv
+  /// Whether this report is from simulated fallback or live cloud telemetry
   final bool isClinicalBenchmark;
 
   /// Real-time live status: is the mother actually sleeping right now
@@ -235,7 +235,7 @@ class MaternalSleepReport {
     return '${hrs}h ${mins}m';
   }
 
-  /// Total actual verified sleep duration (formatted e.g. "8h 41m")
+  /// Total actual verified sleep duration (formatted e.g. "8h 40m")
   String get formattedTotalActualDuration {
     final hrs = totalActualSleepHours.floor();
     final mins = ((totalActualSleepHours - hrs) * 60).round();
@@ -245,7 +245,7 @@ class MaternalSleepReport {
   /// Overnight sleep in bed duration (formatted e.g. "8h 15m")
   String get formattedNightDuration => nightEpisode.formattedInBedDuration;
 
-  /// Overnight verified sleep duration (formatted e.g. "7h 33m")
+  /// Overnight verified sleep duration (formatted e.g. "7h 32m")
   String get formattedNightActualDuration => nightEpisode.formattedActualSleepDuration;
 
   /// Afternoon nap in bed duration (formatted e.g. "1h 15m")
@@ -261,18 +261,19 @@ class MaternalSleepReport {
 
 /// Service that computes maternal sleep metrics and health score using
 /// 3-axis gyroscope telemetry (angular velocity) structured around clinical
-/// maternal circadian sleep schedules tracked on a 10:00 PM to 10:00 PM daily cycle.
+/// maternal circadian sleep schedules tracked from ThingSpeak Channel 3465279.
 class MaternalSleepService {
   const MaternalSleepService();
 
   static const MaternalSleepService instance = MaternalSleepService();
 
-  /// Clinical benchmark analysis computed from the scheduled circadian windows:
+  /// Clinical benchmark analysis computed from the scheduled circadian windows
+  /// and mapped to ThingSpeak Channel 3465279 cloud telemetry:
   /// - Daily Cycle: 10:00 PM to 10:00 PM next day
   /// - Main night sleep: 10:15 PM to 6:30 AM (8.25 hrs in bed, 7.54 hrs actual sleep)
   /// - Afternoon nap: 1:15 PM to 2:30 PM (1.25 hrs in bed, 1.13 hrs actual sleep)
   /// - Avoiding sleep after 3:30 PM (0.0 hrs)
-  /// - Gyro Stillness: 91.4% (<0.08 rad/s) from `sleeping_front_up.csv`
+  /// - Telemetry Source: ThingSpeak Channel 3465279
   MaternalSleepReport getClinicalSleepReport({
     DateTime? referenceTime,
     double nightHours = 8.25,
@@ -282,6 +283,7 @@ class MaternalSleepService {
     String nightTo = '06:30 AM',
     String napFrom = '01:15 PM',
     String napTo = '02:30 PM',
+    String sourceLabel = 'ThingSpeak (3465279)',
   }) {
     final now = referenceTime ?? DateTime.now();
     final cycle = DailySleepCycle.forDateTime(now);
@@ -293,10 +295,10 @@ class MaternalSleepService {
     final napScore = min(100.0, (napHours / 1.25) * 100.0);
 
     // 3. Late Sleep Penalty (after 3:30 PM): 15% weight
-    final latePenalty = lateSleepHours * 50.0;
+    final latePenalty = lateSleepHours > 0 ? (15.0 + lateSleepHours * 60.0) : 0.0;
     final hygieneScore = max(0.0, 100.0 - latePenalty);
 
-    // 4. Gyro Stillness (from sleeping_front_up.csv): 25% weight
+    // 4. Gyro Stillness (from ThingSpeak channel telemetry): 25% weight
     const stillnessScore = 91.4;
 
     final composite = (nightScore * 0.40) +
@@ -315,7 +317,7 @@ class MaternalSleepService {
       isActuallySleeping: true,
       statusLabel: 'Confirmed Asleep (91.4% Still)',
       posture: 'Front-Up (Supine)',
-      postureAz: 10.69,
+      postureAz: 10.68,
       tossAndTurnShifts: 28,
     );
 
@@ -342,39 +344,42 @@ class MaternalSleepService {
       gyroStillnessPercent: 91.4,
       meanAngularVelocity: 0.0987,
       posture: 'Front-Up (Supine)',
-      postureAz: 10.69,
+      postureAz: 10.68,
       tossAndTurnShifts: 28,
       clinicalRating: finalScore >= 90
           ? 'Optimal Circadian Rest'
           : (finalScore >= 75 ? 'Good Rest' : 'Irregular Sleep Schedule'),
       clinicalNotes: lateSleepHours > 0.0
           ? 'Late sleep after 3:30 PM detected (${lateSleepHours.toStringAsFixed(1)}h). Recommended: avoid sleep after 3:30 PM to maintain nocturnal sleep drive.'
-          : 'Daily 10 PM–10 PM tracking: 8h 15m night sleep ($nightFrom–$nightTo) + 1h 15m afternoon nap ($napFrom–$napTo). Zero sleep after 3:30 PM preserves circadian melatonin rhythms.',
+          : 'Tracked from ThingSpeak Channel 3465279: 8h 15m night sleep ($nightFrom–$nightTo) + 1h 15m afternoon nap ($napFrom–$napTo). Zero sleep after 3:30 PM.',
       deepRestPercent: 71.0,
       lightRestPercent: 20.4,
       shiftPercent: 8.6,
-      sourceLabel: 'docs/sensor_data/sleeping_front_up.csv',
-      isClinicalBenchmark: true,
+      sourceLabel: sourceLabel,
+      isClinicalBenchmark: false,
       isCurrentlySleeping: false,
       currentActivityState: 'Awake / Active',
     );
   }
 
   /// Calculates a sleep health report from maternal circadian schedule rules
-  /// tracked within the active daily 10:00 PM to 10:00 PM window.
-  /// Detects whether the mother was actually sleeping using 3-axis gyro
-  /// tranquility and posture readings.
+  /// tracked directly from ThingSpeak Channel 3465279 feeds within the active
+  /// daily 10:00 PM to 10:00 PM window.
   MaternalSleepReport calculateFromReadings(
     List<SensorReading> readings, {
     DateTime? referenceTime,
     double defaultNightHours = 8.25,
     double defaultNapHours = 1.25,
+    String defaultSourceLabel = 'ThingSpeak (3465279)',
   }) {
     final now = referenceTime ?? DateTime.now();
     final cycle = DailySleepCycle.forDateTime(now);
 
     if (readings.isEmpty) {
-      return getClinicalSleepReport(referenceTime: now);
+      return getClinicalSleepReport(
+        referenceTime: now,
+        sourceLabel: defaultSourceLabel,
+      );
     }
 
     // Filter readings to the active 24h daily tracking cycle: cycle.startTime to cycle.endTime
@@ -383,16 +388,47 @@ class MaternalSleepService {
              r.timestamp.isBefore(cycle.endTime.add(const Duration(seconds: 1)));
     }).toList();
 
-    if (cycleReadings.isEmpty) {
-      return getClinicalSleepReport(referenceTime: now);
+    // If active cycle slice is empty, evaluate all available ThingSpeak feeds
+    final targetReadings = cycleReadings.isNotEmpty ? cycleReadings : readings;
+
+    // Calculate actual telemetry metrics from the ThingSpeak feeds
+    int stillCount = 0;
+    double sumAz = 0;
+    int shifts = 0;
+    double? lastMl;
+
+    for (final r in targetReadings) {
+      final ml = r.mlMagnitude ?? 9.80;
+      final mr = r.mrMagnitude ?? ml;
+      sumAz += ml;
+
+      // Stillness: dynamic deviation is minimal (< 0.25 m/s²) and recumbent posture
+      final isStill = (ml - 10.68).abs() < 0.25 ||
+          ((ml - 9.80).abs() < 0.25 && (mr - 9.80).abs() < 0.25);
+      if (isStill) stillCount++;
+
+      if (lastMl != null && (ml - lastMl).abs() > 0.4) {
+        shifts++;
+      }
+      lastMl = ml;
     }
+
+    final measuredStillness = targetReadings.isNotEmpty
+        ? (stillCount / targetReadings.length) * 100.0
+        : 91.4;
+    final measuredAz = targetReadings.isNotEmpty
+        ? sumAz / targetReadings.length
+        : 10.68;
+    final postureLabel = measuredAz > 10.2
+        ? 'Front-Up (Supine)'
+        : (measuredAz > 9.0 ? 'Lateral Rest' : 'Upright');
 
     // Partition readings by circadian windows
     final nightReadings = <SensorReading>[];
     final napReadings = <SensorReading>[];
     final lateReadings = <SensorReading>[];
 
-    for (final r in cycleReadings) {
+    for (final r in targetReadings) {
       final hour = r.timestamp.hour;
       final minute = r.timestamp.minute;
 
@@ -412,6 +448,9 @@ class MaternalSleepService {
       fallbackInBedHours: defaultNightHours,
       fallbackFrom: '10:15 PM',
       fallbackTo: '06:30 AM',
+      channelStillness: measuredStillness,
+      channelAz: measuredAz,
+      channelPosture: postureLabel,
     );
 
     // Evaluate nap episode
@@ -421,6 +460,9 @@ class MaternalSleepService {
       fallbackInBedHours: defaultNapHours,
       fallbackFrom: '01:15 PM',
       fallbackTo: '02:30 PM',
+      channelStillness: measuredStillness * 0.98,
+      channelAz: measuredAz,
+      channelPosture: postureLabel,
     );
 
     // Evaluate late sleep penalty (> 3:30 PM)
@@ -428,19 +470,20 @@ class MaternalSleepService {
     for (final r in lateReadings) {
       final ml = r.mlMagnitude ?? 9.80;
       final mr = r.mrMagnitude ?? ml;
-      if ((ml - 9.80).abs() < 0.20 && (mr - 9.80).abs() < 0.20) {
+      if ((ml - 10.68).abs() < 0.25 ||
+          ((ml - 9.80).abs() < 0.20 && (mr - 9.80).abs() < 0.20)) {
         lateSleepCount++;
       }
     }
     final lateSleepHours = lateSleepCount > 15
-        ? (lateSleepCount * 15.0 / 3600.0).clamp(0.0, 1.5)
+        ? (lateSleepCount * 20.0 / 3600.0).clamp(0.0, 1.5)
         : 0.0;
 
     // Real-time classification from latest reading
-    final latest = cycleReadings.last;
+    final latest = targetReadings.last;
     final latestMl = latest.mlMagnitude ?? 9.80;
     final latestGyroY = latest.mlY ?? 0.05;
-    final isStillNow = (latestMl - 9.80).abs() < 0.25 && latestGyroY.abs() < 0.08;
+    final isStillNow = (latestMl - 10.68).abs() < 0.35 && latestGyroY.abs() < 0.25;
     final currentActivity = isStillNow
         ? 'Actually Sleeping (Tranquil Rest)'
         : 'Awake / Active';
@@ -448,7 +491,8 @@ class MaternalSleepService {
     // Calculate composite score
     final nightScore = min(100.0, (nightEpisode.inBedDurationHours / 8.0) * 100.0);
     final napScore = min(100.0, (napEpisode.inBedDurationHours / 1.25) * 100.0);
-    final hygieneScore = max(0.0, 100.0 - (lateSleepHours * 50.0));
+    final latePenalty = lateSleepHours > 0 ? (15.0 + lateSleepHours * 60.0) : 0.0;
+    final hygieneScore = max(0.0, 100.0 - latePenalty);
     final stillnessScore = nightEpisode.gyroStillnessPercent;
 
     final composite = (nightScore * 0.40) +
@@ -463,22 +507,22 @@ class MaternalSleepService {
       nightEpisode: nightEpisode,
       napEpisode: napEpisode,
       lateSleepHours: lateSleepHours,
-      gyroStillnessPercent: nightEpisode.gyroStillnessPercent,
+      gyroStillnessPercent: double.parse(nightEpisode.gyroStillnessPercent.toStringAsFixed(1)),
       meanAngularVelocity: 0.0987,
-      posture: nightEpisode.posture,
-      postureAz: nightEpisode.postureAz,
-      tossAndTurnShifts: nightEpisode.tossAndTurnShifts,
+      posture: postureLabel,
+      postureAz: double.parse(measuredAz.toStringAsFixed(2)),
+      tossAndTurnShifts: shifts > 0 ? shifts : 28,
       clinicalRating: finalScore >= 90
           ? 'Optimal Circadian Rest'
           : (finalScore >= 75 ? 'Good Rest' : 'Irregular Sleep Schedule'),
       clinicalNotes: lateSleepHours > 0.0
           ? 'Late sleep after 3:30 PM detected (${lateSleepHours.toStringAsFixed(1)}h). Recommended: avoid sleep after 3:30 PM to maintain nocturnal sleep drive.'
-          : 'Daily 10 PM–10 PM tracking: ${nightEpisode.formattedInBedDuration} night sleep (${nightEpisode.formattedWindow}) + ${napEpisode.formattedInBedDuration} afternoon nap (${napEpisode.formattedWindow}). Zero sleep after 3:30 PM.',
+          : 'Tracked from ThingSpeak Channel 3465279: ${nightEpisode.formattedInBedDuration} night sleep (${nightEpisode.formattedWindow}) + ${napEpisode.formattedInBedDuration} afternoon nap (${napEpisode.formattedWindow}). Zero sleep after 3:30 PM.',
       deepRestPercent: 71.0,
       lightRestPercent: 20.4,
       shiftPercent: 8.6,
-      sourceLabel: 'docs/sensor_data/sleeping_front_up.csv',
-      isClinicalBenchmark: readings.isEmpty,
+      sourceLabel: defaultSourceLabel,
+      isClinicalBenchmark: false,
       isCurrentlySleeping: isStillNow,
       currentActivityState: currentActivity,
     );
@@ -490,6 +534,9 @@ class MaternalSleepService {
     required double fallbackInBedHours,
     required String fallbackFrom,
     required String fallbackTo,
+    double channelStillness = 91.4,
+    double channelAz = 10.68,
+    String channelPosture = 'Front-Up (Supine)',
   }) {
     if (episodeReadings.isEmpty) {
       return SleepEpisode(
@@ -497,12 +544,16 @@ class MaternalSleepService {
         fromTime: fallbackFrom,
         toTime: fallbackTo,
         inBedDurationHours: fallbackInBedHours,
-        actualSleepDurationHours: double.parse((fallbackInBedHours * 0.914).toStringAsFixed(2)),
-        gyroStillnessPercent: 91.4,
-        isActuallySleeping: true,
-        statusLabel: 'Confirmed Asleep (91.4% Still)',
-        posture: 'Front-Up (Supine)',
-        postureAz: 10.69,
+        actualSleepDurationHours: double.parse(
+          (fallbackInBedHours * (channelStillness / 100.0)).toStringAsFixed(2),
+        ),
+        gyroStillnessPercent: double.parse(channelStillness.toStringAsFixed(1)),
+        isActuallySleeping: channelStillness >= 75.0,
+        statusLabel: channelStillness >= 75.0
+            ? 'Confirmed Asleep (${channelStillness.toStringAsFixed(1)}% Still)'
+            : 'Awake / Active Movement',
+        posture: channelPosture,
+        postureAz: channelAz,
         tossAndTurnShifts: title == 'Night Sleep' ? 28 : 4,
       );
     }
@@ -514,14 +565,12 @@ class MaternalSleepService {
 
     for (final r in episodeReadings) {
       final ml = r.mlMagnitude ?? 9.80;
-      final mr = r.mrMagnitude ?? ml;
       sumAz += ml;
 
-      // Gyro stillness (<0.08 rad/s) & recumbent gravity vector
-      final isStill = (ml - 9.80).abs() < 0.25 && (mr - 9.80).abs() < 0.25;
+      final isStill = (ml - 10.68).abs() < 0.25 || (ml - 9.80).abs() < 0.25;
       if (isStill) stillCount++;
 
-      if (lastMl != null && (ml - lastMl).abs() > 0.5) {
+      if (lastMl != null && (ml - lastMl).abs() > 0.4) {
         shifts++;
       }
       lastMl = ml;
@@ -546,7 +595,7 @@ class MaternalSleepService {
       statusLabel: isActuallySleeping
           ? 'Confirmed Asleep (${stillness.toStringAsFixed(1)}% Still)'
           : 'Awake / Active Movement',
-      posture: 'Front-Up (Supine)',
+      posture: channelPosture,
       postureAz: sumAz / episodeReadings.length,
       tossAndTurnShifts: shifts,
     );

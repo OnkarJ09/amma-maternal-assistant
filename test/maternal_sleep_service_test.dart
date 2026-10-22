@@ -39,11 +39,11 @@ void main() {
       expect(report.gyroStillnessPercent, equals(91.4));
       expect(report.meanAngularVelocity, equals(0.0987));
       expect(report.posture, equals('Front-Up (Supine)'));
-      expect(report.postureAz, equals(10.69));
+      expect(report.postureAz, equals(10.68));
       expect(report.tossAndTurnShifts, equals(28));
       expect(report.clinicalRating, equals('Optimal Circadian Rest'));
-      expect(report.sourceLabel, equals('docs/sensor_data/sleeping_front_up.csv'));
-      expect(report.isClinicalBenchmark, isTrue);
+      expect(report.sourceLabel, equals('ThingSpeak (3465279)'));
+      expect(report.isClinicalBenchmark, isFalse);
 
       // Verify sleep episodes (From-To and isActuallySleeping)
       expect(report.nightEpisode.fromTime, equals('10:15 PM'));
