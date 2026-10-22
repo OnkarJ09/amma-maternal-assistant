@@ -54,7 +54,7 @@ void main() {
     // 1. Initial State on Overview: Dual-sensor calibrated
     expect(find.text('Calibrated'), findsOneWidget);
     expect(
-      find.text('Gate: Dual-Sensor • Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC'),
+      find.text('Gate: Dual-Sensor • Δa < 0.35 m/s² • max(PL,PR) > 120 ADC'),
       findsOneWidget,
     );
 
@@ -96,7 +96,7 @@ void main() {
     expect(find.text('Piezo Only'), findsOneWidget);
     expect(find.text('Piezo-only gated (Motion gate bypassed)'), findsOneWidget);
     expect(
-      find.textContaining('Gate: Piezo Only • max(PL,PR) > 1800 ADC (Motion rejection OFF)'),
+      find.textContaining('Gate: Piezo Only • max(PL,PR) > 120 ADC (Motion rejection OFF)'),
       findsOneWidget,
     );
 
@@ -138,7 +138,7 @@ void main() {
 
     expect(find.textContaining('Calibration reset to factory defaults'), findsOneWidget);
     expect(calibrationService.isDualGated, isTrue);
-    expect(calibrationService.piezoThreshold, equals(1800.0));
+    expect(calibrationService.piezoThreshold, equals(120.0));
     expect(calibrationService.motionThreshold, equals(0.35));
 
     // 9. Verify Overview returns to standard Dual-Sensor baseline
@@ -147,7 +147,7 @@ void main() {
 
     expect(find.text('Calibrated'), findsOneWidget);
     expect(
-      find.text('Gate: Dual-Sensor • Δa < 0.35 m/s² • max(PL,PR) > 1800 ADC'),
+      find.text('Gate: Dual-Sensor • Δa < 0.35 m/s² • max(PL,PR) > 120 ADC'),
       findsOneWidget,
     );
   });

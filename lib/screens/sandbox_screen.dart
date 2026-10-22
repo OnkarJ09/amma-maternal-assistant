@@ -41,6 +41,12 @@ class _SandboxScreenState extends State<SandboxScreen> {
       _enablePiezoGate == _calibration.enablePiezoGate &&
       _enableMotionGate == _calibration.enableMotionGate;
 
+  double get _sliderMin => _enableFiltering ? 20.0 : 500.0;
+  double get _sliderMax => _enableFiltering ? 2000.0 : 10000.0;
+  int get _sliderDivisions => _enableFiltering ? 198 : 38;
+  double get _clampedPiezoThreshold =>
+      _piezoThreshold.clamp(_sliderMin, _sliderMax);
+
   @override
   void initState() {
     super.initState();
@@ -108,7 +114,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
             style: TextStyle(fontSize: 13, color: muted),
           ),
           const SizedBox(height: 16),
-          _buildTuningControlsCard(teal, ink, muted),
+          _buildTuningControlsCard(report, teal, ink, muted, coral),
           const SizedBox(height: 16),
           _buildMetricsOverview(report, teal, coral, ink, muted),
           const SizedBox(height: 16),
@@ -122,7 +128,13 @@ class _SandboxScreenState extends State<SandboxScreen> {
     );
   }
 
-  Widget _buildTuningControlsCard(Color teal, Color ink, Color muted) {
+  Widget _buildTuningControlsCard(
+    SignalAnalysisReport report,
+    Color teal,
+    Color ink,
+    Color muted,
+    Color coral,
+  ) {
     final isDual = _enablePiezoGate && _enableMotionGate;
     final isPiezoOnly = _enablePiezoGate && !_enableMotionGate;
     final isMotionOnly = !_enablePiezoGate && _enableMotionGate;
@@ -137,20 +149,40 @@ class _SandboxScreenState extends State<SandboxScreen> {
               children: [
                 const Icon(Icons.tune_rounded, color: Color(0xFF2F776B)),
                 const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Algorithm Parameters',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      color: Color(0xFF183A36),
-                    ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Algorithm Parameters',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: Color(0xFF183A36),
+                        ),
+                      ),
+                      Text(
+                        _enableFiltering
+                            ? 'Digital High-Pass Filter ON (baseline subtraction active)'
+                            : 'Raw ADC Counts Mode (no baseline filter)',
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF73827D)),
+                      ),
+                    ],
                   ),
                 ),
                 Switch(
                   value: _enableFiltering,
                   activeTrackColor: teal,
-                  onChanged: (val) => setState(() => _enableFiltering = val),
+                  onChanged: (val) {
+                    setState(() {
+                      _enableFiltering = val;
+                      if (_enableFiltering && _piezoThreshold > 2000.0) {
+                        _piezoThreshold = 120.0;
+                      } else if (!_enableFiltering && _piezoThreshold < 500.0) {
+                        _piezoThreshold = 4500.0;
+                      }
+                    });
+                  },
                 ),
               ],
             ),
@@ -198,7 +230,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Piezo Spike Threshold Section with Toggle
+            // Piezo Spike Threshold Section with Toggle & Guidance
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -224,7 +256,9 @@ class _SandboxScreenState extends State<SandboxScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Piezo Spike Threshold',
+                          _enableFiltering
+                              ? 'Piezo Spike Threshold (Δ ADC)'
+                              : 'Piezo Spike Threshold (Raw ADC)',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -234,7 +268,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
                       ),
                       Text(
                         _enablePiezoGate
-                            ? '${_piezoThreshold.toStringAsFixed(0)} ADC'
+                            ? '${_clampedPiezoThreshold.toStringAsFixed(0)} ADC'
                             : 'Disabled',
                         style: TextStyle(
                           fontSize: 12.5,
@@ -265,13 +299,35 @@ class _SandboxScreenState extends State<SandboxScreen> {
                   if (_enablePiezoGate) ...[
                     const SizedBox(height: 4),
                     Slider(
-                      value: _piezoThreshold,
-                      min: 500.0,
-                      max: 10000.0,
-                      divisions: 38,
+                      value: _clampedPiezoThreshold,
+                      min: _sliderMin,
+                      max: _sliderMax,
+                      divisions: _sliderDivisions,
                       activeColor: teal,
                       onChanged: (val) => setState(() => _piezoThreshold = val),
                     ),
+                    // Quick Presets Row
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: _enableFiltering
+                          ? [
+                              _buildPresetChip('Subtle: 80', 80.0, teal),
+                              _buildPresetChip('Balanced: 110', 110.0, teal),
+                              _buildPresetChip('Firm: 130', 130.0, teal),
+                              _buildPresetChip('Strong: 200', 200.0, teal),
+                              _buildPresetChip('High: 500', 500.0, teal),
+                            ]
+                          : [
+                              _buildPresetChip('Low: 3500', 3500.0, teal),
+                              _buildPresetChip('PL Baseline: 4000', 4000.0, teal),
+                              _buildPresetChip('Midpoint: 4600', 4600.0, teal),
+                              _buildPresetChip('PR Baseline: 5100', 5100.0, teal),
+                            ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Live Signal Diagnostics Box
+                    _buildPiezoDiagnosticBox(report, teal, ink, muted, coral),
                   ] else ...[
                     const SizedBox(height: 6),
                     const Text(
@@ -502,8 +558,8 @@ class _SandboxScreenState extends State<SandboxScreen> {
                       ScaffoldMessenger.of(context).hideCurrentSnackBar();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: const Text(
-                            'Calibration reset to factory defaults (Dual gate: 1800 ADC, 0.35 m/s²).',
+                          content: Text(
+                            'Calibration reset to factory defaults (Dual gate: ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC, ${_calibration.motionThreshold.toStringAsFixed(2)} m/s²).',
                           ),
                           duration: const Duration(seconds: 2),
                           behavior: SnackBarBehavior.floating,
@@ -527,6 +583,161 @@ class _SandboxScreenState extends State<SandboxScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPresetChip(String label, double val, Color teal) {
+    final isSelected = (_piezoThreshold - val).abs() < 5;
+    return GestureDetector(
+      onTap: () => setState(() => _piezoThreshold = val),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? teal : const Color(0xFFF0F5F3),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isSelected ? teal : const Color(0xFFD4E3DD)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFF2F776B),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPiezoDiagnosticBox(
+    SignalAnalysisReport report,
+    Color teal,
+    Color ink,
+    Color muted,
+    Color coral,
+  ) {
+    double avgPl = 0.0;
+    double avgPr = 0.0;
+    double maxSpike = 0.0;
+    if (widget.readings.isNotEmpty) {
+      final validPl = widget.readings.map((r) => r.plRaw).whereType<double>().toList();
+      final validPr = widget.readings.map((r) => r.prRaw).whereType<double>().toList();
+      if (validPl.isNotEmpty) avgPl = validPl.reduce((a, b) => a + b) / validPl.length;
+      if (validPr.isNotEmpty) avgPr = validPr.reduce((a, b) => a + b) / validPr.length;
+      if (report.points.isNotEmpty) {
+        maxSpike = report.points.map((p) => p.effectiveSpike).reduce((a, b) => a > b ? a : b);
+      }
+    }
+
+    final hasDetectedKicks = report.candidateKickCount > 0;
+    final isThresholdAbovePeak = _piezoThreshold > maxSpike;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAF8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2EBE7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'RESTING BASELINE',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF73827D),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      'PL ~${avgPl.toStringAsFixed(0)} • PR ~${avgPr.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF183A36),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _enableFiltering ? 'PEAK TRANSIENT (Δ ADC)' : 'PEAK RAW ADC',
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF73827D),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${maxSpike.toStringAsFixed(1)} ADC',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: hasDetectedKicks ? teal : coral,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: hasDetectedKicks ? const Color(0xFFE8F5E9) : const Color(0xFFFFF8E1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: hasDetectedKicks ? const Color(0xFFC8E6C9) : const Color(0xFFFFECB3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasDetectedKicks ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                  size: 14,
+                  color: hasDetectedKicks ? const Color(0xFF2E7D32) : const Color(0xFFB77927),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    hasDetectedKicks
+                        ? 'Threshold (${_clampedPiezoThreshold.toStringAsFixed(0)} ADC) intersects transients: ${report.candidateKickCount} kicks detected!'
+                        : 'Threshold (${_clampedPiezoThreshold.toStringAsFixed(0)} ADC) is above peak transient (${maxSpike.toStringAsFixed(0)} ADC). Lower slider to ≤ ${maxSpike.toStringAsFixed(0)} ADC to detect kicks.',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: hasDetectedKicks ? const Color(0xFF2E7D32) : const Color(0xFF8D6E63),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_enableFiltering && isThresholdAbovePeak && maxSpike < 300) ...[
+            const SizedBox(height: 6),
+            const Text(
+              '💡 Why 4000 & 5000 did not detect kicks: Digital filtering eliminates the ~4000/5100 ADC resting bias so only mechanical kick vibrations are measured. In this resting stream, vibrations are ~0–140 ADC. Set threshold to 80–120 ADC to detect kicks.',
+              style: TextStyle(fontSize: 10, color: Color(0xFF73827D), height: 1.3),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -710,7 +921,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
                             ? ExtraLinesData(
                                 horizontalLines: [
                                   HorizontalLine(
-                                    y: _piezoThreshold,
+                                    y: _clampedPiezoThreshold,
                                     color: coral.withValues(alpha: 0.8),
                                     strokeWidth: 1.5,
                                     dashArray: [5, 5],

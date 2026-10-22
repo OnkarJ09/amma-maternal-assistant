@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../models/monitoring_session.dart';
 import '../models/sensor_reading.dart';
 import '../services/calibration_service.dart';
+import '../services/signal_processor.dart';
 
 class TrendsScreen extends StatefulWidget {
   const TrendsScreen({
@@ -26,6 +27,7 @@ class TrendsScreen extends StatefulWidget {
 
 class _TrendsScreenState extends State<TrendsScreen> {
   int _sampleCount = 30;
+  bool _showFilteredPiezo = true;
 
   CalibrationService get _calibration =>
       widget.calibrationService ?? CalibrationService.instance;
@@ -97,10 +99,24 @@ class _TrendsScreenState extends State<TrendsScreen> {
             const SizedBox(height: 16),
             _buildChartCard(
               title: 'Piezoelectric Transducers',
-              unit: 'Raw ADC Counts',
-              subtitle: _calibration.enablePiezoGate
-                  ? 'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR). Red dashed line shows active kick threshold (${_calibration.piezoThreshold.toStringAsFixed(0)} ADC).'
-                  : 'High-precision 16-bit analog displacement sampled via ADS1115 (A1: PL, A0: PR). (Piezo threshold gate disabled in active calibration).',
+              unit: _showFilteredPiezo ? 'Transient Δ ADC' : 'Raw ADC Counts',
+              subtitle: _showFilteredPiezo
+                  ? (_calibration.enablePiezoGate
+                      ? 'High-pass filtered transients (Δ ADC). Red dashed line: active kick threshold (${_calibration.piezoThreshold.toStringAsFixed(0)} ADC).'
+                      : 'High-pass filtered transients (Δ ADC). (Piezo threshold gate disabled in active calibration).')
+                  : 'Raw ADS1115 analog counts (A1: PL, A0: PR). Resting baseline: PL ~4050, PR ~5150 ADC.',
+              headerAction: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: true, label: Text('Filtered (Δ ADC)')),
+                  ButtonSegment(value: false, label: Text('Raw Counts')),
+                ],
+                selected: {_showFilteredPiezo},
+                onSelectionChanged: (val) => setState(() => _showFilteredPiezo = val.first),
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
               chart: _buildPiezoChart(data),
               legendLeft: 'Left Piezo (PL)',
               legendRight: 'Right Piezo (PR)',
@@ -220,6 +236,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
     required String legendRight,
     required Color leftColor,
     required Color rightColor,
+    Widget? headerAction,
   }) {
     return Card(
       child: Padding(
@@ -257,6 +274,10 @@ class _TrendsScreenState extends State<TrendsScreen> {
                 ),
               ],
             ),
+            if (headerAction != null) ...[
+              const SizedBox(height: 10),
+              headerAction,
+            ],
             const SizedBox(height: 4),
             Text(
               subtitle,
@@ -299,6 +320,34 @@ class _TrendsScreenState extends State<TrendsScreen> {
   }
 
   Widget _buildPiezoChart(List<SensorReading> data) {
+    if (_showFilteredPiezo) {
+      final report = const SignalProcessor().analyzeReadings(
+        data,
+        piezoThreshold: _calibration.piezoThreshold,
+        maternalMotionThreshold: _calibration.motionThreshold,
+        enableFiltering: _calibration.enableFiltering,
+        enablePiezoGate: _calibration.enablePiezoGate,
+        enableMotionGate: _calibration.enableMotionGate,
+      );
+
+      final left = <FlSpot>[];
+      final right = <FlSpot>[];
+      for (final p in report.points) {
+        left.add(FlSpot(p.index.toDouble(), p.filteredPl));
+        right.add(FlSpot(p.index.toDouble(), p.filteredPr));
+      }
+
+      return _renderLineChart(
+        spotsA: left,
+        spotsB: right,
+        colorA: const Color(0xFF2F776B),
+        colorB: const Color(0xFFC87565),
+        maxX: (data.length - 1).clamp(1, 100).toDouble(),
+        thresholdY: _calibration.enablePiezoGate ? _calibration.piezoThreshold : null,
+        valueFormatter: (v) => v.toStringAsFixed(0),
+      );
+    }
+
     final left = <FlSpot>[];
     final right = <FlSpot>[];
 
@@ -313,7 +362,9 @@ class _TrendsScreenState extends State<TrendsScreen> {
       colorA: const Color(0xFF2F776B),
       colorB: const Color(0xFFC87565),
       maxX: (data.length - 1).clamp(1, 100).toDouble(),
-      thresholdY: _calibration.enablePiezoGate ? _calibration.piezoThreshold : null,
+      thresholdY: (!_calibration.enableFiltering && _calibration.enablePiezoGate)
+          ? _calibration.piezoThreshold
+          : null,
       valueFormatter: (v) {
         if (v.abs() >= 1000) {
           return '${(v / 1000).toStringAsFixed(1)}k';

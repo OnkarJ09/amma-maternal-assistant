@@ -175,13 +175,18 @@ class _OverviewScreenState extends State<OverviewScreen> {
       case KickHistoryPeriod.day:
         activeCount = summary.todayKicks;
         if (activeCount == 0 && isDeviceOffline) {
-          periodSubtitle = 'No kicks recorded today (Device offline)';
-          clinicalBenchmark =
-              'Wearable inactive for past ${daysSinceLast}d (last logged session had ${summary.totalStreamKicks} kicks). Reconnect belt to record today\'s session.';
+          periodSubtitle = summary.totalStreamKicks > 0
+              ? 'No kicks today (${summary.totalStreamKicks} in stream)'
+              : 'No kicks recorded today (Device offline)';
+          clinicalBenchmark = summary.totalStreamKicks > 0
+              ? 'Wearable inactive today (last logged session had ${summary.totalStreamKicks} kicks under ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC threshold). Switch to Past Week tab to view.'
+              : 'Wearable inactive for past ${daysSinceLast}d. Reconnect belt to record today\'s session.';
           isTargetMet = false;
           indicatorBg = const Color(0xFFFFF3E0);
           indicatorColor = const Color(0xFFB77927);
-          indicatorIcon = Icons.sensors_off_rounded;
+          indicatorIcon = summary.totalStreamKicks > 0
+              ? Icons.history_rounded
+              : Icons.sensors_off_rounded;
         } else {
           periodSubtitle = 'kicks recorded today';
           isTargetMet = activeCount >= 10;
@@ -413,6 +418,40 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 ),
               ],
             ),
+            if (_selectedPeriod == KickHistoryPeriod.day &&
+                activeCount == 0 &&
+                summary.totalStreamKicks > 0) ...[
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () => setState(() => _selectedPeriod = KickHistoryPeriod.week),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.history_rounded, size: 15, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Latest session has ${summary.totalStreamKicks} kicks under ${_calibration.piezoThreshold.toStringAsFixed(0)} ADC threshold (${summary.weekKicks} past 7d). Tap to view Past Week.',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF15803D),
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 11, color: Color(0xFF16A34A)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
 
             // 3-Column Period Comparison
