@@ -6,49 +6,49 @@ void main() {
   group('MaternalSleepService', () {
     const service = MaternalSleepService();
 
-    test('getClinicalSleepReport computes clinical benchmarks from sleeping_front_up.csv', () {
-      final report = service.getClinicalSleepReport(sleepHours: 7.8);
+    test('getClinicalSleepReport computes circadian schedule benchmarks', () {
+      final report = service.getClinicalSleepReport();
 
-      expect(report.healthScore, equals(93));
-      expect(report.sleepHours, equals(7.8));
-      expect(report.formattedDuration, equals('7h 48m'));
+      expect(report.healthScore, equals(98));
+      expect(report.nightSleepHours, equals(8.25));
+      expect(report.napHours, equals(1.25));
+      expect(report.lateSleepHours, equals(0.0));
+      expect(report.formattedNightDuration, equals('8h 15m'));
+      expect(report.formattedNapDuration, equals('1h 15m'));
+      expect(report.formattedTotalDuration, equals('9h 30m'));
       expect(report.gyroStillnessPercent, equals(91.4));
       expect(report.meanAngularVelocity, equals(0.0987));
       expect(report.posture, equals('Front-Up (Supine)'));
       expect(report.postureAz, equals(10.69));
       expect(report.tossAndTurnShifts, equals(28));
-      expect(report.clinicalRating, equals('Optimal Recovery'));
+      expect(report.clinicalRating, equals('Optimal Circadian Rest'));
       expect(report.sourceLabel, equals('docs/sensor_data/sleeping_front_up.csv'));
       expect(report.isClinicalBenchmark, isTrue);
     });
 
-    test('calculateFromReadings falls back to clinical benchmark on empty readings', () {
+    test('calculateFromReadings falls back to circadian benchmark on empty readings', () {
       final report = service.calculateFromReadings([]);
-      expect(report.healthScore, equals(93));
+      expect(report.healthScore, equals(98));
+      expect(report.formattedTotalDuration, equals('9h 30m'));
       expect(report.gyroStillnessPercent, equals(91.4));
     });
 
-    test('calculateFromReadings computes stillness and health score from stream', () {
-      final now = DateTime(2026, 10, 22, 10, 0);
-      final readings = [
-        SensorReading(
-          entryId: 1,
-          timestamp: now,
-          mlMagnitude: 9.81,
+    test('calculateFromReadings applies penalty when sleep occurs after 3:30 PM', () {
+      final lateTime = DateTime(2026, 10, 22, 16, 0); // 4:00 PM (restricted zone)
+      final readings = List.generate(
+        25,
+        (i) => SensorReading(
+          entryId: i + 1,
+          timestamp: lateTime.add(Duration(seconds: i * 15)),
+          mlMagnitude: 9.80,
           mrMagnitude: 9.80,
         ),
-        SensorReading(
-          entryId: 2,
-          timestamp: now.add(const Duration(hours: 4)),
-          mlMagnitude: 9.82,
-          mrMagnitude: 9.81,
-        ),
-      ];
+      );
 
-      final report = service.calculateFromReadings(readings, targetHours: 8.0);
-      expect(report.healthScore, isNonZero);
-      expect(report.gyroStillnessPercent, equals(91.4));
-      expect(report.sleepHours, equals(4.0));
+      final report = service.calculateFromReadings(readings);
+      expect(report.lateSleepHours, greaterThan(0.0));
+      expect(report.healthScore, lessThan(98));
+      expect(report.clinicalNotes, contains('Late sleep after 3:30 PM detected'));
     });
   });
 }

@@ -61,6 +61,10 @@ void main() {
     expect(find.text('Past Week'), findsOneWidget);
     expect(find.text('Past Month'), findsOneWidget);
 
+    // Scroll down so Kick Activity tabs are fully visible above bottom NavigationBar
+    await tester.drag(find.byType(ListView).first, const Offset(0, -350));
+    await tester.pumpAndSettle();
+
     // Tap 'Past Week' tab
     await tester.tap(find.text('Past Week'));
     await tester.pumpAndSettle();

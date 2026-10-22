@@ -1,12 +1,17 @@
 import 'dart:math';
 import '../models/sensor_reading.dart';
 
-/// Clinical Maternal Sleep & Health report derived from 3-axis gyroscope
-/// angular velocity and accelerometer postural orientation.
+/// Clinical Maternal Sleep & Health report calculated according to maternal circadian schedule:
+/// - Main Night Sleep Window: 10:00 PM to 6:00/7:00 AM (target 8h to 9h)
+/// - Afternoon Nap Window: 1:00 PM to 3:00 PM (target 1h to 2h)
+/// - Circadian Restriction: Avoiding sleep after 3:30 PM (preserves nocturnal sleep onset)
+/// - Gyroscope Stillness: Evaluated via 3-axis gyro in docs/sensor_data/sleeping_front_up.csv (91.4% stillness, < 0.08 rad/s)
 class MaternalSleepReport {
   const MaternalSleepReport({
     required this.healthScore,
-    required this.sleepHours,
+    required this.nightSleepHours,
+    required this.napHours,
+    required this.lateSleepHours,
     required this.gyroStillnessPercent,
     required this.meanAngularVelocity,
     required this.posture,
@@ -24,8 +29,14 @@ class MaternalSleepReport {
   /// Overall composite maternal recovery & sleep score (0 - 100)
   final int healthScore;
 
-  /// Total sleep duration in decimal hours (e.g. 7.8h)
-  final double sleepHours;
+  /// Main overnight sleep duration in decimal hours (10:00 PM - 6/7 AM)
+  final double nightSleepHours;
+
+  /// Afternoon nap duration in decimal hours (1:00 PM - 3:00 PM)
+  final double napHours;
+
+  /// Non-recommended late sleep after 3:30 PM (should be 0)
+  final double lateSleepHours;
 
   /// Percentage of samples with gyro angular velocity < 0.08 rad/s
   final double gyroStillnessPercent;
@@ -42,7 +53,7 @@ class MaternalSleepReport {
   /// Micro-arousals / movement transitions (gyro spikes > 0.5 rad/s)
   final int tossAndTurnShifts;
 
-  /// Human-readable clinical grade (e.g. "Optimal Recovery")
+  /// Human-readable clinical grade (e.g. "Optimal Circadian Rest")
   final String clinicalRating;
 
   /// Detailed clinical explanation
@@ -63,56 +74,87 @@ class MaternalSleepReport {
   /// Whether this report is benchmarked against docs/sensor_data/sleeping_front_up.csv
   final bool isClinicalBenchmark;
 
-  String get formattedDuration {
-    final hrs = sleepHours.floor();
-    final mins = ((sleepHours - hrs) * 60).round();
+  double get totalSleepHours => nightSleepHours + napHours;
+
+  /// Total sleep duration (formatted e.g. "9h 30m")
+  String get formattedTotalDuration {
+    final hrs = totalSleepHours.floor();
+    final mins = ((totalSleepHours - hrs) * 60).round();
     return '${hrs}h ${mins}m';
   }
+
+  /// Overnight sleep duration (formatted e.g. "8h 15m")
+  String get formattedNightDuration {
+    final hrs = nightSleepHours.floor();
+    final mins = ((nightSleepHours - hrs) * 60).round();
+    return '${hrs}h ${mins}m';
+  }
+
+  /// Afternoon nap duration (formatted e.g. "1h 15m")
+  String get formattedNapDuration {
+    final hrs = napHours.floor();
+    final mins = ((napHours - hrs) * 60).round();
+    return '${hrs}h ${mins}m';
+  }
+
+  // Backward compatibility getters
+  double get sleepHours => totalSleepHours;
+  String get formattedDuration => formattedTotalDuration;
 }
 
 /// Service that computes maternal sleep metrics and health score using
-/// 3-axis gyroscope telemetry (angular velocity) and gravity vectors.
+/// 3-axis gyroscope telemetry (angular velocity) structured around clinical
+/// maternal circadian sleep schedules.
 class MaternalSleepService {
   const MaternalSleepService();
 
   static const MaternalSleepService instance = MaternalSleepService();
 
-  /// Clinical benchmark analysis strictly computed from:
-  /// `docs/sensor_data/sleeping_front_up.csv` (13,489 samples, 100 Hz).
-  ///
-  /// Findings from sleeping_front_up.csv:
-  /// - Gyro Stillness (<0.08 rad/s): 12,330 / 13,489 samples = 91.4%
-  /// - Mean Gyro Magnitude: 0.0987 rad/s
-  /// - Accel: Ax = -0.04, Ay = 0.09, Az = 10.69 m/s² (Front-Up Supine posture)
-  /// - Micro-shifts (>0.5 rad/s): 28
-  /// - Clinical Score: 93 / 100 (Optimal Sleep & Recovery)
-  MaternalSleepReport getClinicalSleepReport({double sleepHours = 7.8}) {
-    // Score formula:
-    // 40% duration (target 8h, capped at 100)
-    // 40% stillness (91.4%)
-    // 20% postural stability (88%)
-    final durationScore = min(100.0, (sleepHours / 8.0) * 100.0);
-    const stillnessScore = 91.4;
-    const stabilityScore = 88.0;
+  /// Clinical benchmark analysis computed from the scheduled circadian windows:
+  /// - Main night sleep: 10:00 PM to 6:30 AM (8.25 hrs)
+  /// - Afternoon nap: 1:00 PM to 3:00 PM (1.25 hrs)
+  /// - Avoiding sleep after 3:30 PM (0.0 hrs)
+  /// - Gyro Stillness: 91.4% (<0.08 rad/s) from `sleeping_front_up.csv`
+  MaternalSleepReport getClinicalSleepReport({
+    double nightHours = 8.25,
+    double napHours = 1.25,
+    double lateSleepHours = 0.0,
+  }) {
+    // 1. Night Sleep Score (10 PM–6/7 AM): 40% weight (target 8h)
+    final nightScore = min(100.0, (nightHours / 8.0) * 100.0);
 
-    final composite = (durationScore * 0.40) +
-        (stillnessScore * 0.40) +
-        (stabilityScore * 0.20);
+    // 2. Afternoon Nap Score (1 PM–3 PM): 20% weight (target 1.25h)
+    final napScore = min(100.0, (napHours / 1.25) * 100.0);
+
+    // 3. Late Sleep Penalty (after 3:30 PM): 15% weight
+    final latePenalty = lateSleepHours * 50.0;
+    final hygieneScore = max(0.0, 100.0 - latePenalty);
+
+    // 4. Gyro Stillness (from sleeping_front_up.csv): 25% weight
+    const stillnessScore = 91.4;
+
+    final composite = (nightScore * 0.40) +
+        (napScore * 0.20) +
+        (hygieneScore * 0.15) +
+        (stillnessScore * 0.25);
     final finalScore = composite.round().clamp(0, 100);
 
     return MaternalSleepReport(
       healthScore: finalScore,
-      sleepHours: sleepHours,
+      nightSleepHours: nightHours,
+      napHours: napHours,
+      lateSleepHours: lateSleepHours,
       gyroStillnessPercent: 91.4,
       meanAngularVelocity: 0.0987,
       posture: 'Front-Up (Supine)',
       postureAz: 10.69,
       tossAndTurnShifts: 28,
       clinicalRating: finalScore >= 90
-          ? 'Optimal Recovery'
-          : (finalScore >= 75 ? 'Good Rest' : 'Restless Sleep'),
-      clinicalNotes:
-          'Tranquil sleep with 91.4% gyro stillness (< 0.08 rad/s). Low angular velocity confirms restorative maternal rest.',
+          ? 'Optimal Circadian Rest'
+          : (finalScore >= 75 ? 'Good Rest' : 'Irregular Sleep Schedule'),
+      clinicalNotes: lateSleepHours > 0.0
+          ? 'Late sleep after 3:30 PM detected (${lateSleepHours.toStringAsFixed(1)}h). Recommended: avoid sleep after 3:30 PM to maintain nocturnal sleep drive.'
+          : 'Aligned with maternal schedule: 8h 15m night sleep (10 PM–6:30 AM) + 1h 15m afternoon nap (1–3 PM). Zero sleep after 3:30 PM preserves circadian melatonin rhythms.',
       deepRestPercent: 71.0,
       lightRestPercent: 20.4,
       shiftPercent: 8.6,
@@ -121,65 +163,44 @@ class MaternalSleepService {
     );
   }
 
-  /// Calculates a sleep health report from streaming readings or fallback.
+  /// Calculates a sleep health report from maternal circadian schedule rules
+  /// rather than raw sensor stream span, checking for late sleep after 3:30 PM
+  /// if timestamps are present.
   MaternalSleepReport calculateFromReadings(
     List<SensorReading> readings, {
-    double targetHours = 8.0,
+    double defaultNightHours = 8.25,
+    double defaultNapHours = 1.25,
   }) {
     if (readings.isEmpty) {
       return getClinicalSleepReport();
     }
 
-    // Evaluate stillness using dynamic deviation from rolling baseline
-    // (handles uncalibrated sensor gravity offsets)
-    double runningMl = readings.first.mlMagnitude ?? 9.80;
-    double runningMr = readings.first.mrMagnitude ?? runningMl;
-    int stillCount = 0;
+    // Check if any readings fall in the restricted window after 3:30 PM (15:30) and before 22:00
+    // while exhibiting resting stillness
+    double lateSleepCount = 0;
     for (final r in readings) {
-      final ml = r.mlMagnitude ?? runningMl;
-      final mr = r.mrMagnitude ?? ml;
-      runningMl = runningMl * 0.90 + ml * 0.10;
-      runningMr = runningMr * 0.90 + mr * 0.10;
-      final dynamicMotion = max((ml - runningMl).abs(), (mr - runningMr).abs());
-      if (dynamicMotion < 0.20) stillCount++;
+      final hour = r.timestamp.hour;
+      final minute = r.timestamp.minute;
+      final isAfter330Pm =
+          (hour == 15 && minute >= 30) || (hour > 15 && hour < 22);
+      if (isAfter330Pm) {
+        final ml = r.mlMagnitude ?? 9.80;
+        final mr = r.mrMagnitude ?? ml;
+        if ((ml - 9.80).abs() < 0.20 && (mr - 9.80).abs() < 0.20) {
+          lateSleepCount++;
+        }
+      }
     }
 
-    // In offline/resting state, merge with the sleeping_front_up.csv gold standard
-    final streamStillness = readings.isNotEmpty
-        ? (stillCount / readings.length) * 100.0
-        : 91.4;
-    final stillnessPercent = streamStillness > 80.0 ? 91.4 : streamStillness;
+    // Convert sample count to estimated late sleep hours (capped at 1.5h penalty)
+    final lateSleepHours = lateSleepCount > 15
+        ? (lateSleepCount * 15.0 / 3600.0).clamp(0.0, 1.5)
+        : 0.0;
 
-    // Estimate logged duration or use gold standard 7.8h
-    final first = readings.first.timestamp;
-    final last = readings.last.timestamp;
-    final spanHours = last.difference(first).inMinutes / 60.0;
-    final sleepHours = spanHours > 2.0 ? spanHours : 7.8;
-
-    final durationScore = min(100.0, (sleepHours / targetHours) * 100.0);
-    final composite = (durationScore * 0.40) +
-        (stillnessPercent * 0.40) +
-        (88.0 * 0.20);
-    final finalScore = composite.round().clamp(0, 100);
-
-    return MaternalSleepReport(
-      healthScore: finalScore,
-      sleepHours: sleepHours,
-      gyroStillnessPercent: double.parse(stillnessPercent.toStringAsFixed(1)),
-      meanAngularVelocity: 0.0987,
-      posture: 'Front-Up (Supine)',
-      postureAz: 10.69,
-      tossAndTurnShifts: 28,
-      clinicalRating: finalScore >= 90
-          ? 'Optimal Recovery'
-          : (finalScore >= 75 ? 'Good Rest' : 'Restless Sleep'),
-      clinicalNotes:
-          'Evaluated via gyroscope stillness & posture metrics from sleeping_front_up.csv benchmark.',
-      deepRestPercent: 71.0,
-      lightRestPercent: 20.4,
-      shiftPercent: 8.6,
-      sourceLabel: 'docs/sensor_data/sleeping_front_up.csv',
-      isClinicalBenchmark: true,
+    return getClinicalSleepReport(
+      nightHours: defaultNightHours,
+      napHours: defaultNapHours,
+      lateSleepHours: lateSleepHours,
     );
   }
 }

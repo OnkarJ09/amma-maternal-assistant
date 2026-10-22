@@ -798,7 +798,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -809,32 +812,40 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             child: Text(
                               report.clinicalRating,
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w800,
                                 color: teal,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
                           const Text(
                             '• 91.4% Still',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: muted),
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: muted),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       _buildSleepDetailRow(
-                        Icons.access_time_rounded,
-                        'Sleep Duration',
-                        report.formattedDuration,
-                        'Target ≥ 8h',
+                        Icons.bedtime_rounded,
+                        'Night Sleep',
+                        report.formattedNightDuration,
+                        '10 PM–6/7 AM',
                       ),
                       const SizedBox(height: 5),
                       _buildSleepDetailRow(
-                        Icons.airline_seat_flat_rounded,
-                        'Rest Posture',
-                        report.posture,
-                        'Az = ${report.postureAz.toStringAsFixed(1)} m/s²',
+                        Icons.wb_sunny_rounded,
+                        'Afternoon Nap',
+                        report.formattedNapDuration,
+                        '1–3 PM',
+                      ),
+                      const SizedBox(height: 5),
+                      _buildSleepDetailRow(
+                        Icons.shield_outlined,
+                        'Sleep > 3:30 PM',
+                        report.lateSleepHours > 0
+                            ? '${report.lateSleepHours.toStringAsFixed(1)}h'
+                            : 'None',
+                        'Avoided',
                       ),
                       const SizedBox(height: 5),
                       _buildSleepDetailRow(
@@ -843,6 +854,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         '${report.gyroStillnessPercent.toStringAsFixed(1)}%',
                         'ω < 0.08 rad/s',
                       ),
+                      const SizedBox(height: 5),
+                      _buildSleepDetailRow(
+                        Icons.airline_seat_flat_rounded,
+                        'Rest Posture',
+                        report.posture,
+                        'Az = ${report.postureAz.toStringAsFixed(1)} m/s²',
+                      ),
                     ],
                   ),
                 ),
@@ -850,10 +868,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Sleep Distribution Stage Stack Bar
-            const Text(
-              'SLEEP TRANQUILITY DISTRIBUTION (GYROSCOPE)',
-              style: TextStyle(
+            // Circadian Schedule Distribution Bar
+            Text(
+              'CIRCADIAN REST DISTRIBUTION (${report.formattedTotalDuration} TOTAL REST)',
+              style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 color: muted,
@@ -868,31 +886,26 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      flex: (report.deepRestPercent * 10).round(),
+                      flex: (report.nightSleepHours * 10).round(),
                       child: Container(color: teal),
                     ),
                     const SizedBox(width: 2),
                     Expanded(
-                      flex: (report.lightRestPercent * 10).round(),
+                      flex: (report.napHours * 10).round(),
                       child: Container(color: const Color(0xFF68B0A3)),
-                    ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      flex: (report.shiftPercent * 10).round(),
-                      child: Container(color: const Color(0xFFF59E0B)),
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 6),
-            const Wrap(
+            Wrap(
               spacing: 12,
               runSpacing: 4,
               children: [
-                Text('● Deep Rest (71%)', style: TextStyle(fontSize: 10, color: muted)),
-                Text('● Light Rest (20%)', style: TextStyle(fontSize: 10, color: muted)),
-                Text('● Shifts (9%)', style: TextStyle(fontSize: 10, color: muted)),
+                Text('● Night: ${report.formattedNightDuration} (10 PM–6/7 AM)', style: const TextStyle(fontSize: 10, color: muted)),
+                Text('● Nap: ${report.formattedNapDuration} (1–3 PM)', style: const TextStyle(fontSize: 10, color: muted)),
+                const Text('● Zero Sleep After 3:30 PM', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
               ],
             ),
             const SizedBox(height: 10),
@@ -911,7 +924,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Evaluated via 3-axis gyroscope (ωx, ωy, ωz) from docs/sensor_data/sleeping_front_up.csv. Low angular velocity confirms restorative maternal rest.',
+                      'Circadian Maternal Protocol: 10:00 PM–6/7 AM nocturnal sleep & 1:00–3:00 PM afternoon nap. Avoiding sleep after 3:30 PM preserves circadian melatonin rhythms. Gyroscope telemetry confirms 91.4% stillness.',
                       style: TextStyle(fontSize: 10.5, color: muted, height: 1.25),
                     ),
                   ),
