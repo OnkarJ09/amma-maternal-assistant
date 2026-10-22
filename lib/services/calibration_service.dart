@@ -26,7 +26,7 @@ class CalibrationService extends ChangeNotifier {
   /// Global singleton instance
   static final CalibrationService instance = CalibrationService();
 
-  static const double defaultPiezoThreshold = 120.0;
+  static const double defaultPiezoThreshold = 1800.0;
   static const double defaultMotionThreshold = 0.35;
   static const bool defaultEnableFiltering = true;
 

@@ -10,7 +10,7 @@ void main() {
     });
 
     test('initializes with clinical factory defaults and dual-gating enabled', () {
-      expect(service.piezoThreshold, equals(120.0));
+      expect(service.piezoThreshold, equals(1800.0));
       expect(service.motionThreshold, equals(0.35));
       expect(service.imuThreshold, equals(0.35));
       expect(service.enableFiltering, isTrue);

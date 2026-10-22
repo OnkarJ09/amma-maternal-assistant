@@ -78,7 +78,7 @@ class SignalProcessor {
   /// 3. Minimum 2-second refractory inter-kick interval
   SignalAnalysisReport analyzeReadings(
     List<SensorReading> readings, {
-    double piezoThreshold = 120.0,
+    double piezoThreshold = 1800.0,
     double maternalMotionThreshold = 0.35,
     bool enableFiltering = true,
     bool enablePiezoGate = true,

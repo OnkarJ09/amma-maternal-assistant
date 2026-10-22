@@ -41,9 +41,9 @@ class _SandboxScreenState extends State<SandboxScreen> {
       _enablePiezoGate == _calibration.enablePiezoGate &&
       _enableMotionGate == _calibration.enableMotionGate;
 
-  double get _sliderMin => _enableFiltering ? 20.0 : 500.0;
-  double get _sliderMax => _enableFiltering ? 2000.0 : 10000.0;
-  int get _sliderDivisions => _enableFiltering ? 198 : 38;
+  double get _sliderMin => _enableFiltering ? 50.0 : 1000.0;
+  double get _sliderMax => _enableFiltering ? 8000.0 : 15000.0;
+  int get _sliderDivisions => _enableFiltering ? 159 : 140;
   double get _clampedPiezoThreshold =>
       _piezoThreshold.clamp(_sliderMin, _sliderMax);
 
@@ -176,10 +176,10 @@ class _SandboxScreenState extends State<SandboxScreen> {
                   onChanged: (val) {
                     setState(() {
                       _enableFiltering = val;
-                      if (_enableFiltering && _piezoThreshold > 2000.0) {
-                        _piezoThreshold = 120.0;
-                      } else if (!_enableFiltering && _piezoThreshold < 500.0) {
-                        _piezoThreshold = 4500.0;
+                      if (_enableFiltering && _piezoThreshold > 8000.0) {
+                        _piezoThreshold = 1800.0;
+                      } else if (!_enableFiltering && _piezoThreshold < 1000.0) {
+                        _piezoThreshold = 5000.0;
                       }
                     });
                   },
@@ -312,17 +312,18 @@ class _SandboxScreenState extends State<SandboxScreen> {
                       runSpacing: 4,
                       children: _enableFiltering
                           ? [
-                              _buildPresetChip('Subtle: 80', 80.0, teal),
-                              _buildPresetChip('Balanced: 110', 110.0, teal),
-                              _buildPresetChip('Firm: 130', 130.0, teal),
-                              _buildPresetChip('Strong: 200', 200.0, teal),
-                              _buildPresetChip('High: 500', 500.0, teal),
+                              _buildPresetChip('Bench: 120', 120.0, teal),
+                              _buildPresetChip('Sensitive: 500', 500.0, teal),
+                              _buildPresetChip('Clinical: 1800', 1800.0, teal),
+                              _buildPresetChip('Firm: 3000', 3000.0, teal),
+                              _buildPresetChip('Heavy: 5000', 5000.0, teal),
                             ]
                           : [
                               _buildPresetChip('Low: 3500', 3500.0, teal),
-                              _buildPresetChip('PL Baseline: 4000', 4000.0, teal),
-                              _buildPresetChip('Midpoint: 4600', 4600.0, teal),
-                              _buildPresetChip('PR Baseline: 5100', 5100.0, teal),
+                              _buildPresetChip('PL Base: 4200', 4200.0, teal),
+                              _buildPresetChip('Midpoint: 4700', 4700.0, teal),
+                              _buildPresetChip('PR Base: 5200', 5200.0, teal),
+                              _buildPresetChip('Spike: 7500', 7500.0, teal),
                             ],
                     ),
                     const SizedBox(height: 10),
@@ -590,6 +591,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
   Widget _buildPresetChip(String label, double val, Color teal) {
     final isSelected = (_piezoThreshold - val).abs() < 5;
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _piezoThreshold = val),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -733,7 +735,7 @@ class _SandboxScreenState extends State<SandboxScreen> {
           if (_enableFiltering && isThresholdAbovePeak && maxSpike < 300) ...[
             const SizedBox(height: 6),
             const Text(
-              '💡 Why 4000 & 5000 did not detect kicks: Digital filtering eliminates the ~4000/5100 ADC resting bias so only mechanical kick vibrations are measured. In this resting stream, vibrations are ~0–140 ADC. Set threshold to 80–120 ADC to detect kicks.',
+              '💡 Baseline Noise vs Transients: Hardware DC bias averages ~5000 ADC with baseline noise up to ~500 ADC (see docs/sensor_data). Digital filtering removes this DC bias so only dynamic kick transients are evaluated. In this motionless stream, transients are < 140 ADC (use 80–120 for bench testing; clinical threshold is 1800 ADC).',
               style: TextStyle(fontSize: 10, color: Color(0xFF73827D), height: 1.3),
             ),
           ],

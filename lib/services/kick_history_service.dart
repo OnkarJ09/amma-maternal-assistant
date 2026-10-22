@@ -46,7 +46,7 @@ class KickHistoryService {
   /// counts will truthfully reflect 0 for that period.
   KickHistorySummary calculateSummary(
     List<SensorReading> readings, {
-    double piezoThreshold = 120.0,
+    double piezoThreshold = 1800.0,
     double maternalMotionThreshold = 0.35,
     bool enableFiltering = true,
     bool enablePiezoGate = true,
