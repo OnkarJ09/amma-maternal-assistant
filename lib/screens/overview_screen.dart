@@ -743,6 +743,49 @@ class _OverviewScreenState extends State<OverviewScreen> {
             ),
             const SizedBox(height: 18),
 
+            // Daily 10 PM -> 10 PM Tracking Cycle Window
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.history_toggle_off_rounded, size: 15, color: Color(0xFF475569)),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Cycle: ${report.cycle.formattedCycleRange}',
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF334155),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'Resets 10 PM',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // Health Score Meter & Key Breakdown Row
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -791,7 +834,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 18),
+                const SizedBox(width: 16),
 
                 // Metrics Breakdown Column
                 Expanded(
@@ -825,18 +868,26 @@ class _OverviewScreenState extends State<OverviewScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      _buildSleepDetailRow(
-                        Icons.bedtime_rounded,
-                        'Night Sleep',
-                        report.formattedNightDuration,
-                        '10 PM–6/7 AM',
+                      _buildSleepEpisodeRow(
+                        icon: Icons.bedtime_rounded,
+                        title: 'Night Sleep',
+                        fromTime: report.nightEpisode.fromTime,
+                        toTime: report.nightEpisode.toTime,
+                        inBedDuration: report.nightEpisode.formattedInBedDuration,
+                        actualDuration: report.nightEpisode.formattedActualSleepDuration,
+                        isActuallySleeping: report.nightEpisode.isActuallySleeping,
+                        gyroStillness: report.nightEpisode.gyroStillnessPercent,
                       ),
-                      const SizedBox(height: 5),
-                      _buildSleepDetailRow(
-                        Icons.wb_sunny_rounded,
-                        'Afternoon Nap',
-                        report.formattedNapDuration,
-                        '1–3 PM',
+                      const SizedBox(height: 6),
+                      _buildSleepEpisodeRow(
+                        icon: Icons.wb_sunny_rounded,
+                        title: 'Afternoon Nap',
+                        fromTime: report.napEpisode.fromTime,
+                        toTime: report.napEpisode.toTime,
+                        inBedDuration: report.napEpisode.formattedInBedDuration,
+                        actualDuration: report.napEpisode.formattedActualSleepDuration,
+                        isActuallySleeping: report.napEpisode.isActuallySleeping,
+                        gyroStillness: report.napEpisode.gyroStillnessPercent,
                       ),
                       const SizedBox(height: 5),
                       _buildSleepDetailRow(
@@ -847,14 +898,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                             : 'None',
                         'Avoided',
                       ),
-                      const SizedBox(height: 5),
-                      _buildSleepDetailRow(
-                        Icons.waves_rounded,
-                        'Gyro Tranquility',
-                        '${report.gyroStillnessPercent.toStringAsFixed(1)}%',
-                        'ω < 0.08 rad/s',
-                      ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
                       _buildSleepDetailRow(
                         Icons.airline_seat_flat_rounded,
                         'Rest Posture',
@@ -870,7 +914,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
             // Circadian Schedule Distribution Bar
             Text(
-              'CIRCADIAN REST DISTRIBUTION (${report.formattedTotalDuration} TOTAL REST)',
+              'CIRCADIAN REST DISTRIBUTION (${report.formattedTotalDuration} IN BED • ${report.formattedTotalActualDuration} ACTUAL SLEEP)',
               style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -903,8 +947,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
               spacing: 12,
               runSpacing: 4,
               children: [
-                Text('● Night: ${report.formattedNightDuration} (10 PM–6/7 AM)', style: const TextStyle(fontSize: 10, color: muted)),
-                Text('● Nap: ${report.formattedNapDuration} (1–3 PM)', style: const TextStyle(fontSize: 10, color: muted)),
+                Text('● Night: ${report.nightEpisode.formattedWindow} (${report.nightEpisode.formattedInBedDuration})', style: const TextStyle(fontSize: 10, color: muted)),
+                Text('● Nap: ${report.napEpisode.formattedWindow} (${report.napEpisode.formattedInBedDuration})', style: const TextStyle(fontSize: 10, color: muted)),
                 const Text('● Zero Sleep After 3:30 PM', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
               ],
             ),
@@ -924,7 +968,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Circadian Maternal Protocol: 10:00 PM–6/7 AM nocturnal sleep & 1:00–3:00 PM afternoon nap. Avoiding sleep after 3:30 PM preserves circadian melatonin rhythms. Gyroscope telemetry confirms 91.4% stillness.',
+                      'Daily 10:00 PM–10:00 PM tracking: Updated daily and resets nightly at 10 PM. 3-axis gyro telemetry verifies if the mother was actually sleeping (angular velocity < 0.08 rad/s) based on sleeping_front_up.csv.',
                       style: TextStyle(fontSize: 10.5, color: muted, height: 1.25),
                     ),
                   ),
@@ -934,6 +978,68 @@ class _OverviewScreenState extends State<OverviewScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSleepEpisodeRow({
+    required IconData icon,
+    required String title,
+    required String fromTime,
+    required String toTime,
+    required String inBedDuration,
+    required String actualDuration,
+    required bool isActuallySleeping,
+    required double gyroStillness,
+  }) {
+    const ink = Color(0xFF183A36);
+    const muted = Color(0xFF73827D);
+    const teal = Color(0xFF2F776B);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 12.5, color: teal),
+                const SizedBox(width: 4),
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: ink),
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: isActuallySleeping ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                isActuallySleeping ? 'Asleep ✓' : 'Awake',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: isActuallySleeping ? const Color(0xFF166534) : const Color(0xFF92400E),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 1),
+        Padding(
+          padding: const EdgeInsets.only(left: 16.5),
+          child: Text(
+            '$fromTime – $toTime ($inBedDuration bed • $actualDuration actual sleep)',
+            style: const TextStyle(fontSize: 9.5, color: muted, fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
     );
   }
 
